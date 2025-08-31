@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(REQUESTER)
+  team      Team?    @relation(fields: [teamId], references: [id])
+  teamId    String?
+  skills    String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requestsCreated Request[] @relation("requestsCreated")
+  requestsAssigned Request[] @relation("requestsAssigned")
+  events          RequestEvent[]
+  subscriptions   Subscription[]
+}
+
+enum Role {
+  REQUESTER
+  COORDINATOR
+  ASSIGNEE
+  ADMIN
+}
+
+model Team {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  users  User[]
+  slaConfigs SLAConfig[]
+  schedules Schedule[]
+  requests Request[]
+}
+
+model RequestType {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  schemaJson  String
+  defaultSlaMinutes Int @default(1440)
+  requests    Request[]
+}
+
+model Request {
+  id            String   @id @default(cuid())
+  type          RequestType @relation(fields: [typeId], references: [id])
+  typeId        String
+  createdBy     User     @relation("requestsCreated", fields: [createdById], references: [id])
+  createdById   String
+  assignee      User?    @relation("requestsAssigned", fields: [assigneeId], references: [id])
+  assigneeId    String?
+  team          Team?    @relation(fields: [teamId], references: [id])
+  teamId        String?
+  title         String
+  description   String
+  priority      Priority @default(MEDIUM)
+  currentStatus Status   @default(NEW)
+  metadataJson  String   @default("{}")
+  dueAt         DateTime?
+  slaBreachAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  events        RequestEvent[]
+  attachments   Attachment[]
+  subscriptions Subscription[]
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum Status {
+  NEW
+  TRIAGE
+  ASSIGNED
+  IN_PROGRESS
+  BLOCKED
+  REVIEW
+  DONE
+  CANCELLED
+}
+
+model RequestEvent {
+  id         String   @id @default(cuid())
+  request    Request  @relation(fields: [requestId], references: [id])
+  requestId  String
+  actor      User     @relation(fields: [actorId], references: [id])
+  actorId    String
+  eventType  String
+  payloadJson String   @default("{}")
+  createdAt  DateTime @default(now())
+}
+
+model Attachment {
+  id         String   @id @default(cuid())
+  request    Request  @relation(fields: [requestId], references: [id])
+  requestId  String
+  uploadedBy User     @relation(fields: [uploadedById], references: [id])
+  uploadedById String
+  url        String
+  name       String
+  size       Int
+  mime       String
+  createdAt  DateTime @default(now())
+}
+
+model SLAConfig {
+  id        String  @id @default(cuid())
+  team      Team    @relation(fields: [teamId], references: [id])
+  teamId    String
+  type      RequestType @relation(fields: [typeId], references: [id])
+  typeId    String
+  priority  Priority
+  targetMinutes Int
+}
+
+model Schedule {
+  id        String  @id @default(cuid())
+  team      Team    @relation(fields: [teamId], references: [id])
+  teamId    String
+  tz        String
+  workdaysJson String
+  holidaysJson String
+}
+
+model Subscription {
+  id        String  @id @default(cuid())
+  request   Request @relation(fields: [requestId], references: [id])
+  requestId String
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+}

@@ -3,37 +3,32 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
 const bcrypt = require("bcrypt");
 const prisma = new client_1.PrismaClient();
+const Role = { REQUESTER: 'REQUESTER', COORDINATOR: 'COORDINATOR', ASSIGNEE: 'ASSIGNEE', ADMIN: 'ADMIN' };
+const Priority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', URGENT: 'URGENT' };
+const Status = { NEW: 'NEW', TRIAGE: 'TRIAGE', ASSIGNED: 'ASSIGNED', IN_PROGRESS: 'IN_PROGRESS', BLOCKED: 'BLOCKED', REVIEW: 'REVIEW', DONE: 'DONE', CANCELLED: 'CANCELLED' };
 async function main() {
     const hash = await bcrypt.hash('password123', 10);
-    const teamIT = await prisma.team.upsert({
-        where: { name: 'IT' },
-        update: {},
-        create: { name: 'IT' },
-    });
-    const teamDesign = await prisma.team.upsert({
-        where: { name: 'Design' },
-        update: {},
-        create: { name: 'Design' },
-    });
-    const admin = await prisma.user.upsert({
+    const teamIT = await prisma.team.upsert({ where: { name: 'IT' }, update: {}, create: { name: 'IT' } });
+    const teamDesign = await prisma.team.upsert({ where: { name: 'Design' }, update: {}, create: { name: 'Design' } });
+    await prisma.user.upsert({
         where: { email: 'admin@orgjet.local' },
         update: {},
-        create: { name: 'Admin', email: 'admin@orgjet.local', password: hash, role: client_1.Role.ADMIN },
+        create: { name: 'Admin', email: 'admin@orgjet.local', password: hash, role: Role.ADMIN },
     });
     const coordinator = await prisma.user.upsert({
         where: { email: 'lead@orgjet.local' },
         update: {},
-        create: { name: 'Team Lead', email: 'lead@orgjet.local', password: hash, role: client_1.Role.COORDINATOR, teamId: teamIT.id },
+        create: { name: 'Team Lead', email: 'lead@orgjet.local', password: hash, role: Role.COORDINATOR, teamId: teamIT.id },
     });
     const assignee = await prisma.user.upsert({
         where: { email: 'doer@orgjet.local' },
         update: {},
-        create: { name: 'Alex Doer', email: 'doer@orgjet.local', password: hash, role: client_1.Role.ASSIGNEE, teamId: teamIT.id },
+        create: { name: 'Alex Doer', email: 'doer@orgjet.local', password: hash, role: Role.ASSIGNEE, teamId: teamIT.id },
     });
     const requester = await prisma.user.upsert({
         where: { email: 'emp@orgjet.local' },
         update: {},
-        create: { name: 'Employee', email: 'emp@orgjet.local', password: hash, role: client_1.Role.REQUESTER },
+        create: { name: 'Employee', email: 'emp@orgjet.local', password: hash, role: Role.REQUESTER },
     });
     const hwType = await prisma.requestType.upsert({
         where: { name: 'Hardware Request' },
@@ -63,11 +58,7 @@ async function main() {
                 title: "Design Brief",
                 type: "object",
                 required: ["summary"],
-                properties: {
-                    summary: { type: "string" },
-                    brand: { type: "string" },
-                    due_date: { type: "string", format: "date" }
-                }
+                properties: { summary: { type: "string" }, brand: { type: "string" }, due_date: { type: "string", format: "date" } }
             }),
             defaultSlaMinutes: 2880
         }
@@ -79,8 +70,8 @@ async function main() {
             typeId: hwType.id,
             createdById: requester.id,
             teamId: teamIT.id,
-            priority: client_1.Priority.HIGH,
-            currentStatus: client_1.Status.TRIAGE
+            priority: Priority.HIGH,
+            currentStatus: Status.TRIAGE
         }
     });
     await prisma.requestEvent.create({ data: { requestId: r1.id, actorId: requester.id, eventType: 'created', payloadJson: '{}' } });
@@ -91,18 +82,13 @@ async function main() {
             typeId: designType.id,
             createdById: requester.id,
             teamId: teamDesign.id,
-            priority: client_1.Priority.MEDIUM,
-            currentStatus: client_1.Status.ASSIGNED,
+            priority: Priority.MEDIUM,
+            currentStatus: Status.ASSIGNED,
             assigneeId: assignee.id
         }
     });
     await prisma.requestEvent.create({ data: { requestId: r2.id, actorId: coordinator.id, eventType: 'assigned', payloadJson: JSON.stringify({ assigneeId: assignee.id }) } });
     console.log('Seed complete.');
 }
-main().catch(e => {
-    console.error(e);
-    process.exit(1);
-}).finally(async () => {
-    await prisma.$disconnect();
-});
+main().catch(e => { console.error(e); process.exit(1); }).finally(async () => { await prisma.$disconnect(); });
 //# sourceMappingURL=seed.js.map

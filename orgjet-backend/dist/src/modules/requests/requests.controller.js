@@ -11,14 +11,14 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var _a, _b, _c, _d;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RequestsController = void 0;
 const common_1 = require("@nestjs/common");
 const passport_1 = require("@nestjs/passport");
-const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../../prisma.service");
 const class_validator_1 = require("class-validator");
+const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+const STATUSES = ['NEW', 'TRIAGE', 'ASSIGNED', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE', 'CANCELLED'];
 class CreateRequestDto {
 }
 __decorate([
@@ -35,8 +35,8 @@ __decorate([
 ], CreateRequestDto.prototype, "typeId", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(client_1.Priority),
-    __metadata("design:type", typeof (_a = typeof client_1.Priority !== "undefined" && client_1.Priority) === "function" ? _a : Object)
+    (0, class_validator_1.IsIn)(PRIORITIES),
+    __metadata("design:type", String)
 ], CreateRequestDto.prototype, "priority", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
@@ -51,8 +51,8 @@ class UpdateRequestDto {
 }
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(client_1.Status),
-    __metadata("design:type", typeof (_b = typeof client_1.Status !== "undefined" && client_1.Status) === "function" ? _b : Object)
+    (0, class_validator_1.IsIn)(STATUSES),
+    __metadata("design:type", String)
 ], UpdateRequestDto.prototype, "status", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
@@ -60,8 +60,8 @@ __decorate([
 ], UpdateRequestDto.prototype, "assigneeId", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsEnum)(client_1.Priority),
-    __metadata("design:type", typeof (_c = typeof client_1.Priority !== "undefined" && client_1.Priority) === "function" ? _c : Object)
+    (0, class_validator_1.IsIn)(PRIORITIES),
+    __metadata("design:type", String)
 ], UpdateRequestDto.prototype, "priority", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
@@ -87,7 +87,10 @@ let RequestsController = class RequestsController {
         if (type)
             where.type = { name: type };
         if (search)
-            where.OR = [{ title: { contains: search, mode: 'insensitive' } }, { description: { contains: search, mode: 'insensitive' } }];
+            where.OR = [
+                { title: { contains: search, mode: 'insensitive' } },
+                { description: { contains: search, mode: 'insensitive' } }
+            ];
         const items = await this.prisma.request.findMany({
             where,
             include: { type: true, assignee: { select: { id: true, name: true } }, team: true },
@@ -96,12 +99,13 @@ let RequestsController = class RequestsController {
         return { items };
     }
     async create(req, dto) {
+        var _a;
         const created = await this.prisma.request.create({
             data: {
                 title: dto.title,
                 description: dto.description,
                 typeId: dto.typeId,
-                priority: dto.priority || 'MEDIUM',
+                priority: ((_a = dto.priority) !== null && _a !== void 0 ? _a : 'MEDIUM'),
                 createdById: req.user.userId,
                 metadataJson: JSON.stringify(dto.metadata || {}),
             },
@@ -117,11 +121,15 @@ let RequestsController = class RequestsController {
         return created;
     }
     async get(id) {
-        const item = await this.prisma.request.findUnique({
+        return this.prisma.request.findUnique({
             where: { id },
-            include: { type: true, assignee: { select: { id: true, name: true } }, team: true, events: { include: { actor: true }, orderBy: { createdAt: 'asc' } } },
+            include: {
+                type: true,
+                assignee: { select: { id: true, name: true } },
+                team: true,
+                events: { include: { actor: true }, orderBy: { createdAt: 'asc' } },
+            },
         });
-        return item;
     }
     async update(req, id, dto) {
         const updated = await this.prisma.request.update({
@@ -144,7 +152,7 @@ let RequestsController = class RequestsController {
         return updated;
     }
     async comment(req, id, dto) {
-        const ev = await this.prisma.requestEvent.create({
+        return this.prisma.requestEvent.create({
             data: {
                 requestId: id,
                 actorId: req.user.userId,
@@ -153,7 +161,6 @@ let RequestsController = class RequestsController {
             },
             include: { actor: true },
         });
-        return ev;
     }
 };
 exports.RequestsController = RequestsController;
@@ -164,7 +171,7 @@ __decorate([
     __param(2, (0, common_1.Query)('type')),
     __param(3, (0, common_1.Query)('search')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [typeof (_d = typeof client_1.Status !== "undefined" && client_1.Status) === "function" ? _d : Object, String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "list", null);
 __decorate([

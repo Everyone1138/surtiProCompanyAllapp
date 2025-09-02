@@ -32,7 +32,7 @@ let BoardController = class BoardController {
         });
         const lanes = ['NEW', 'TRIAGE', 'ASSIGNED', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE', 'CANCELLED'];
         const grouped = Object.fromEntries(lanes.map(l => [l, []]));
-        items.forEach(i => { grouped[i.currentStatus].push(i); });
+        items.forEach((i) => { grouped[i.currentStatus].push(i); });
         return grouped;
     }
 };

@@ -19,8 +19,8 @@ export class BoardController {
       orderBy: { updatedAt: 'desc' }
     });
     const lanes = ['NEW','TRIAGE','ASSIGNED','IN_PROGRESS','BLOCKED','REVIEW','DONE','CANCELLED'];
-    const grouped = Object.fromEntries(lanes.map(l => [l, [] as any[]]));
-    items.forEach(i => { (grouped[i.currentStatus] as any[]).push(i); });
+    const grouped: Record<string, any[]> = Object.fromEntries(lanes.map(l => [l, [] as any[]]));
+    items.forEach((i: any) => { (grouped[i.currentStatus] as any[]).push(i); });
     return grouped;
   }
 }

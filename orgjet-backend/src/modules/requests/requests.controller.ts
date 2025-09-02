@@ -1,26 +1,31 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Prisma, Priority, Status } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
-import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsIn, IsOptional, IsString } from 'class-validator';
+
+const PRIORITIES = ['LOW','MEDIUM','HIGH','URGENT'] as const;
+type Priority = typeof PRIORITIES[number];
+
+const STATUSES = ['NEW','TRIAGE','ASSIGNED','IN_PROGRESS','BLOCKED','REVIEW','DONE','CANCELLED'] as const;
+type Status = typeof STATUSES[number];
 
 class CreateRequestDto {
-  @IsString() title: string;
-  @IsString() description: string;
-  @IsString() typeId: string;
-  @IsOptional() @IsEnum(Priority) priority?: Priority;
+  @IsString() title!: string;
+  @IsString() description!: string;
+  @IsString() typeId!: string;
+  @IsOptional() @IsIn(PRIORITIES as readonly string[]) priority?: Priority;
   @IsOptional() @IsDateString() dueAt?: string;
   @IsOptional() metadata?: any;
 }
 
 class UpdateRequestDto {
-  @IsOptional() @IsEnum(Status) status?: Status;
+  @IsOptional() @IsIn(STATUSES as readonly string[]) status?: Status;
   @IsOptional() assigneeId?: string;
-  @IsOptional() @IsEnum(Priority) priority?: Priority;
+  @IsOptional() @IsIn(PRIORITIES as readonly string[]) priority?: Priority;
   @IsOptional() @IsDateString() dueAt?: string;
 }
 
-class CommentDto { @IsString() body: string; }
+class CommentDto { @IsString() body!: string; }
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('requests')
@@ -28,12 +33,20 @@ export class RequestsController {
   constructor(private prisma: PrismaService) {}
 
   @Get()
-  async list(@Query('status') status?: Status, @Query('team') team?: string, @Query('type') type?: string, @Query('search') search?: string) {
-    const where: Prisma.RequestWhereInput = {};
+  async list(
+    @Query('status') status?: string,
+    @Query('team') team?: string,
+    @Query('type') type?: string,
+    @Query('search') search?: string
+  ) {
+    const where: any = {};
     if (status) where.currentStatus = status;
     if (team) where.team = { name: team };
     if (type) where.type = { name: type };
-    if (search) where.OR = [{ title: { contains: search, mode: 'insensitive' } }, { description: { contains: search, mode: 'insensitive' } }];
+    if (search) where.OR = [
+      { title: { contains: search, mode: 'insensitive' } },
+      { description: { contains: search, mode: 'insensitive' } }
+    ];
 
     const items = await this.prisma.request.findMany({
       where,
@@ -50,7 +63,7 @@ export class RequestsController {
         title: dto.title,
         description: dto.description,
         typeId: dto.typeId,
-        priority: dto.priority || 'MEDIUM',
+        priority: (dto.priority ?? 'MEDIUM') as any,
         createdById: req.user.userId,
         metadataJson: JSON.stringify(dto.metadata || {}),
       },
@@ -68,11 +81,15 @@ export class RequestsController {
 
   @Get(':id')
   async get(@Param('id') id: string) {
-    const item = await this.prisma.request.findUnique({
+    return this.prisma.request.findUnique({
       where: { id },
-      include: { type: true, assignee: { select: { id: true, name: true } }, team: true, events: { include: { actor: true }, orderBy: { createdAt: 'asc' } } },
+      include: {
+        type: true,
+        assignee: { select: { id: true, name: true } },
+        team: true,
+        events: { include: { actor: true }, orderBy: { createdAt: 'asc' } },
+      },
     });
-    return item;
   }
 
   @Patch(':id')
@@ -80,9 +97,9 @@ export class RequestsController {
     const updated = await this.prisma.request.update({
       where: { id },
       data: {
-        currentStatus: dto.status,
+        currentStatus: dto.status as any,
         assigneeId: dto.assigneeId,
-        priority: dto.priority,
+        priority: dto.priority as any,
         dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,
       },
     });
@@ -99,7 +116,7 @@ export class RequestsController {
 
   @Post(':id/comment')
   async comment(@Req() req: any, @Param('id') id: string, @Body() dto: CommentDto) {
-    const ev = await this.prisma.requestEvent.create({
+    return this.prisma.requestEvent.create({
       data: {
         requestId: id,
         actorId: req.user.userId,
@@ -108,6 +125,5 @@ export class RequestsController {
       },
       include: { actor: true },
     });
-    return ev;
   }
 }

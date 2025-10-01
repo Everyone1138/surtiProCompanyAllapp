@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       '/auth': { target: 'http://localhost:3000', changeOrigin: true },
       '/me': { target: 'http://localhost:3000', changeOrigin: true },
+      '/users': { target: 'http://127.0.0.1:3000', changeOrigin: true },
       '/requests': { target: 'http://localhost:3000', changeOrigin: true },
       '/board': { target: 'http://localhost:3000', changeOrigin: true },
     }

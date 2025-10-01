@@ -27,18 +27,36 @@ let UsersController = class UsersController {
         const { password, ...safe } = user;
         return safe;
     }
+    async listUsers(team) {
+        const where = {};
+        if (team)
+            where.team = { name: team };
+        const users = await this.prisma.user.findMany({
+            where,
+            select: { id: true, name: true, email: true, role: true, team: { select: { name: true } } },
+            orderBy: [{ role: 'asc' }, { name: 'asc' }],
+        });
+        return { users };
+    }
 };
 exports.UsersController = UsersController;
 __decorate([
-    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
-    (0, common_1.Get)(),
+    (0, common_1.Get)('me'),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "me", null);
+__decorate([
+    (0, common_1.Get)('users'),
+    __param(0, (0, common_1.Query)('team')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "listUsers", null);
 exports.UsersController = UsersController = __decorate([
-    (0, common_1.Controller)('me'),
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
+    (0, common_1.Controller)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService])
 ], UsersController);
 //# sourceMappingURL=users.controller.js.map

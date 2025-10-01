@@ -8,7 +8,7 @@ type Priority = typeof PRIORITIES[number];
 
 const STATUSES = ['NEW','TRIAGE','ASSIGNED','IN_PROGRESS','BLOCKED','REVIEW','DONE','CANCELLED'] as const;
 type Status = typeof STATUSES[number];
-
+class AssignDto { @IsOptional() @IsString() assigneeId!: string | null; }
 class CreateRequestDto {
   @IsString() title!: string;
   @IsString() description!: string;
@@ -34,50 +34,72 @@ export class RequestsController {
 
   @Get()
   async list(
-    @Query('status') status?: string,
+    @Req() req: any,
+    @Query('status') status?: string,     // CSV supported e.g. "ASSIGNED,IN_PROGRESS"
     @Query('team') team?: string,
     @Query('type') type?: string,
-    @Query('search') search?: string
+    @Query('search') search?: string,
+    @Query('mine') mine?: string          // "1" to filter assigned to current user
   ) {
     const where: any = {};
-    if (status) where.currentStatus = status;
+
+    // status can be a single value or CSV
+    if (status) {
+      const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
+      if (statuses.length === 1) where.currentStatus = statuses[0];
+      else where.currentStatus = { in: statuses };
+    }
+
     if (team) where.team = { name: team };
     if (type) where.type = { name: type };
-    if (search) where.OR = [
-      { title: { contains: search, mode: 'insensitive' } },
-      { description: { contains: search, mode: 'insensitive' } }
-    ];
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // only items assigned to the current user
+    if (mine === '1' && req?.user?.userId) {
+      where.assigneeId = req.user.userId;
+    }
 
     const items = await this.prisma.request.findMany({
       where,
-      include: { type: true, assignee: { select: { id: true, name: true } }, team: true },
+      include: {
+        type: true,
+        assignee: { select: { id: true, name: true } },
+        team: true
+      },
       orderBy: { updatedAt: 'desc' },
     });
+
     return { items };
   }
 
-  @Post()
-  async create(@Req() req: any, @Body() dto: CreateRequestDto) {
-    const created = await this.prisma.request.create({
-      data: {
-        title: dto.title,
-        description: dto.description,
-        typeId: dto.typeId,
-        priority: (dto.priority ?? 'MEDIUM') as any,
-        createdById: req.user.userId,
-        metadataJson: JSON.stringify(dto.metadata || {}),
-      },
-    });
-    await this.prisma.requestEvent.create({
-      data: {
-        requestId: created.id,
-        actorId: req.user.userId,
-        eventType: 'created',
-        payloadJson: JSON.stringify({ title: dto.title }),
-      },
-    });
-    return created;
-  }
+@Post()
+async create(@Req() req: any, @Body() dto: CreateRequestDto) {
+  const created = await this.prisma.request.create({
+    data: {
+      title: dto.title,
+      description: dto.description,
+      typeId: dto.typeId,
+      priority: (dto.priority ?? 'MEDIUM') as any,
+      createdById: req.user.userId,
+      metadataJson: JSON.stringify(dto.metadata || {}),
+      dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,   // ← add this
+    },
+  });
+  await this.prisma.requestEvent.create({
+    data: {
+      requestId: created.id,
+      actorId: req.user.userId,
+      eventType: 'created',
+      payloadJson: JSON.stringify({ title: dto.title, dueAt: dto.dueAt ?? null }),
+    },
+  });
+  return created;
+}
 
   @Get(':id')
   async get(@Param('id') id: string) {
@@ -126,4 +148,36 @@ export class RequestsController {
       include: { actor: true },
     });
   }
+
+  
+@Post(':id/assign')
+async assign(@Req() req: any, @Param('id') id: string, @Body() dto: AssignDto) {
+  // normalize blank -> null (unassign)
+  const nextAssignee = dto.assigneeId && dto.assigneeId.trim() !== '' ? dto.assigneeId : null;
+
+  // read current status to decide if we should move to ASSIGNED
+  const current = await this.prisma.request.findUnique({ where: { id }, select: { currentStatus: true } });
+
+  const data: any = { assigneeId: nextAssignee };
+  if (nextAssignee && ['NEW','TRIAGE'].includes(current?.currentStatus ?? '')) {
+    data.currentStatus = 'ASSIGNED';
+  }
+
+  const updated = await this.prisma.request.update({
+    where: { id },
+    data,
+    include: { assignee: { select: { id: true, name: true } } }
+  });
+
+  await this.prisma.requestEvent.create({
+    data: {
+      requestId: id,
+      actorId: req.user.userId,
+      eventType: 'assigned',
+      payloadJson: JSON.stringify({ assigneeId: nextAssignee }),
+    },
+  });
+
+  return updated;
+}
 }

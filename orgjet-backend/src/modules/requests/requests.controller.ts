@@ -1,7 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards, UploadedFiles} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PrismaService } from '../../prisma.service';
 import { IsDateString, IsIn, IsOptional, IsString } from 'class-validator';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { UseInterceptors } from '@nestjs/common';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 
 const PRIORITIES = ['LOW','MEDIUM','HIGH','URGENT'] as const;
 type Priority = typeof PRIORITIES[number];
@@ -23,6 +28,10 @@ class UpdateRequestDto {
   @IsOptional() assigneeId?: string;
   @IsOptional() @IsIn(PRIORITIES as readonly string[]) priority?: Priority;
   @IsOptional() @IsDateString() dueAt?: string;
+}
+
+function ensureUploadsFolder() {
+  if (!existsSync('uploads')) mkdirSync('uploads', { recursive: true });
 }
 
 class CommentDto { @IsString() body!: string; }
@@ -180,4 +189,130 @@ async assign(@Req() req: any, @Param('id') id: string, @Body() dto: AssignDto) {
 
   return updated;
 }
+
+@UseGuards(AuthGuard('jwt'))
+@Post(':id/attachments')
+@UseInterceptors(FilesInterceptor('files', 5, {
+  storage: diskStorage({
+    destination: (req, file, cb) => {
+      ensureUploadsFolder();
+      cb(null, 'uploads');
+    },
+    filename: (req, file, cb) => {
+      const uniq = `${Date.now()}-${Math.round(Math.random()*1e9)}`;
+      cb(null, `${uniq}${extname(file.originalname)}`);
+    }
+  }),
+  fileFilter: (req, file, cb) => {
+    // accept images only
+    if (!file.mimetype.startsWith('image/')) return cb(null, false);
+    cb(null, true);
+  },
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB each
+}))
+async uploadAttachments(@Req() req: any, @Param('id') id: string, @UploadedFiles() files: Express.Multer.File[]) {
+  if (!files || files.length === 0) return { uploaded: [] };
+  const created = await Promise.all(files.map(f => this.prisma.attachment.create({
+    data: {
+      requestId: id,
+      uploadedById: req.user.userId,
+      url: `/uploads/${f.filename}`,
+      name: f.originalname,
+      size: f.size,
+      mime: f.mimetype
+    }
+  })));
+
+  await this.prisma.requestEvent.create({
+  data: {
+    requestId: id,
+    actorId: req.user.userId,
+    eventType: 'attachment_added',
+    payloadJson: JSON.stringify({
+      attachments: created.map(a => ({
+        id: a.id,
+        url: a.url,
+        name: a.name,
+        size: a.size,
+        mime: a.mime,
+        createdAt: a.createdAt
+      }))
+    })
+  }
+});
+  // optional event
+  await this.prisma.requestEvent.create({
+    data: {
+      requestId: id,
+      actorId: req.user.userId,
+      eventType: 'attachment_added',
+      payloadJson: JSON.stringify({ count: created.length })
+    }
+  });
+  return { uploaded: created };
 }
+
+@UseGuards(AuthGuard('jwt'))
+@Post(':id/post')
+@UseInterceptors(FilesInterceptor('files', 5, {
+  storage: diskStorage({
+    destination: (_req, _file, cb) => {
+      ensureUploadsFolder();
+      cb(null, 'uploads');
+    },
+    filename: (_req, file, cb) => {
+      const uniq = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      cb(null, `${uniq}${extname(file.originalname)}`);
+    },
+  }),
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) return cb(null, false);
+    cb(null, true);
+  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB each
+}))
+async createPost(
+  @Req() req: any,
+  @Param('id') id: string,
+  @UploadedFiles() files: Express.Multer.File[],
+  @Body() body: any
+) {
+  const text: string | undefined = body?.text?.toString?.() ?? body?.text ?? undefined;
+
+  // Save images as Attachment rows (optional)
+  const created = !files || files.length === 0 ? [] :
+    await Promise.all(files.map(f => this.prisma.attachment.create({
+      data: {
+        requestId: id,
+        uploadedById: req.user.userId,
+        url: `/uploads/${f.filename}`,
+        name: f.originalname,
+        size: f.size,
+        mime: f.mimetype,
+      }
+    })));
+
+  // Log a single "post" event with both text and attachments
+  const event = await this.prisma.requestEvent.create({
+    data: {
+      requestId: id,
+      actorId: req.user.userId,
+      eventType: 'post',
+      payloadJson: JSON.stringify({
+        text: (text || '').trim() || null,
+        attachments: created.map(a => ({
+          id: a.id, url: a.url, name: a.name, size: a.size, mime: a.mime, createdAt: a.createdAt
+        })),
+      }),
+    },
+  });
+
+  return { ok: true, eventId: event.id, attachments: created.length };
+}
+
+
+}
+
+// function UploadedFiles(): (target: RequestsController, propertyKey: "uploadAttachments", parameterIndex: 2) => void {
+//   throw new Error('Function not implemented.');
+// }

@@ -17,6 +17,11 @@ const common_1 = require("@nestjs/common");
 const passport_1 = require("@nestjs/passport");
 const prisma_service_1 = require("../../prisma.service");
 const class_validator_1 = require("class-validator");
+const platform_express_1 = require("@nestjs/platform-express");
+const common_2 = require("@nestjs/common");
+const multer_1 = require("multer");
+const path_1 = require("path");
+const fs_1 = require("fs");
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 const STATUSES = ['NEW', 'TRIAGE', 'ASSIGNED', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE', 'CANCELLED'];
 class AssignDto {
@@ -75,6 +80,10 @@ __decorate([
     (0, class_validator_1.IsDateString)(),
     __metadata("design:type", String)
 ], UpdateRequestDto.prototype, "dueAt", void 0);
+function ensureUploadsFolder() {
+    if (!(0, fs_1.existsSync)('uploads'))
+        (0, fs_1.mkdirSync)('uploads', { recursive: true });
+}
 class CommentDto {
 }
 __decorate([
@@ -207,6 +216,75 @@ let RequestsController = class RequestsController {
         });
         return updated;
     }
+    async uploadAttachments(req, id, files) {
+        if (!files || files.length === 0)
+            return { uploaded: [] };
+        const created = await Promise.all(files.map(f => this.prisma.attachment.create({
+            data: {
+                requestId: id,
+                uploadedById: req.user.userId,
+                url: `/uploads/${f.filename}`,
+                name: f.originalname,
+                size: f.size,
+                mime: f.mimetype
+            }
+        })));
+        await this.prisma.requestEvent.create({
+            data: {
+                requestId: id,
+                actorId: req.user.userId,
+                eventType: 'attachment_added',
+                payloadJson: JSON.stringify({
+                    attachments: created.map(a => ({
+                        id: a.id,
+                        url: a.url,
+                        name: a.name,
+                        size: a.size,
+                        mime: a.mime,
+                        createdAt: a.createdAt
+                    }))
+                })
+            }
+        });
+        await this.prisma.requestEvent.create({
+            data: {
+                requestId: id,
+                actorId: req.user.userId,
+                eventType: 'attachment_added',
+                payloadJson: JSON.stringify({ count: created.length })
+            }
+        });
+        return { uploaded: created };
+    }
+    async createPost(req, id, files, body) {
+        var _a, _b, _c, _d;
+        const text = (_d = (_c = (_b = (_a = body === null || body === void 0 ? void 0 : body.text) === null || _a === void 0 ? void 0 : _a.toString) === null || _b === void 0 ? void 0 : _b.call(_a)) !== null && _c !== void 0 ? _c : body === null || body === void 0 ? void 0 : body.text) !== null && _d !== void 0 ? _d : undefined;
+        const created = !files || files.length === 0 ? [] :
+            await Promise.all(files.map(f => this.prisma.attachment.create({
+                data: {
+                    requestId: id,
+                    uploadedById: req.user.userId,
+                    url: `/uploads/${f.filename}`,
+                    name: f.originalname,
+                    size: f.size,
+                    mime: f.mimetype,
+                }
+            })));
+        const event = await this.prisma.requestEvent.create({
+            data: {
+                requestId: id,
+                actorId: req.user.userId,
+                eventType: 'post',
+                payloadJson: JSON.stringify({
+                    text: (text || '').trim() || null,
+                    attachments: created.map(a => ({
+                        id: a.id, url: a.url, name: a.name, size: a.size, mime: a.mime, createdAt: a.createdAt
+                    })),
+                }),
+            },
+        });
+        return { ok: true, eventId: event.id, attachments: created.length };
+    }
 };
 exports.RequestsController = RequestsController;
 __decorate([
@@ -263,6 +341,63 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, AssignDto]),
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "assign", null);
+__decorate([
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
+    (0, common_1.Post)(':id/attachments'),
+    (0, common_2.UseInterceptors)((0, platform_express_1.FilesInterceptor)('files', 5, {
+        storage: (0, multer_1.diskStorage)({
+            destination: (req, file, cb) => {
+                ensureUploadsFolder();
+                cb(null, 'uploads');
+            },
+            filename: (req, file, cb) => {
+                const uniq = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+                cb(null, `${uniq}${(0, path_1.extname)(file.originalname)}`);
+            }
+        }),
+        fileFilter: (req, file, cb) => {
+            if (!file.mimetype.startsWith('image/'))
+                return cb(null, false);
+            cb(null, true);
+        },
+        limits: { fileSize: 5 * 1024 * 1024 }
+    })),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.UploadedFiles)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Array]),
+    __metadata("design:returntype", Promise)
+], RequestsController.prototype, "uploadAttachments", null);
+__decorate([
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
+    (0, common_1.Post)(':id/post'),
+    (0, common_2.UseInterceptors)((0, platform_express_1.FilesInterceptor)('files', 5, {
+        storage: (0, multer_1.diskStorage)({
+            destination: (_req, _file, cb) => {
+                ensureUploadsFolder();
+                cb(null, 'uploads');
+            },
+            filename: (_req, file, cb) => {
+                const uniq = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+                cb(null, `${uniq}${(0, path_1.extname)(file.originalname)}`);
+            },
+        }),
+        fileFilter: (_req, file, cb) => {
+            if (!file.mimetype.startsWith('image/'))
+                return cb(null, false);
+            cb(null, true);
+        },
+        limits: { fileSize: 5 * 1024 * 1024 },
+    })),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.UploadedFiles)()),
+    __param(3, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Array, Object]),
+    __metadata("design:returntype", Promise)
+], RequestsController.prototype, "createPost", null);
 exports.RequestsController = RequestsController = __decorate([
     (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Controller)('requests'),

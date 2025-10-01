@@ -54,16 +54,68 @@ async function assignTo(assigneeId: string) {
 
         <h3 className="font-semibold">Activity</h3>
         <div className="space-y-2">
-          {data.events?.map((ev: any) => (
-            <div key={ev.id} className="bg-white p-2 rounded border text-sm">
-              <div className="text-gray-600">
-                {new Date(ev.createdAt).toLocaleString()} • {ev.actor?.name}
+          {data.events?.map((ev: any) => {
+            const payload = (() => {
+              try { return ev.payloadJson ? JSON.parse(ev.payloadJson) : {} } catch { return {} }
+            })()
+
+            return (
+              <div key={ev.id} className="bg-white p-2 rounded border text-sm">
+                <div className="text-gray-600">
+                  {new Date(ev.createdAt).toLocaleString()} • {ev.actor?.name} • {ev.eventType}
+                </div>
+
+                {/* Show comment body */}
+                {ev.eventType === 'comment' && payload?.body && (
+                  <div className="mt-1 whitespace-pre-wrap">{payload.body}</div>
+                )}
+
+                {/* Show assignment info */}
+                {ev.eventType === 'assigned' && (
+                  <div className="mt-1">
+                    Assigned to: <span className="font-medium">{payload?.assigneeId || '—'}</span>
+                  </div>
+                )}
+
+                {/* Show created details (optional nice-to-have) */}
+                {ev.eventType === 'created' && (
+                  <div className="mt-1 text-gray-700">
+                    {payload?.title ? <>Title: <span className="font-medium">{payload.title}</span></> : null}
+                    {payload?.dueAt ? <> • Due: {new Date(payload.dueAt).toLocaleDateString()}</> : null}
+                  </div>
+                )}
+
+                {/* Show uploaded images as thumbnails */}
+                {ev.eventType === 'attachment_added' && Array.isArray(payload?.attachments) && payload.attachments.length > 0 && (
+                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {payload.attachments.map((a: any) => (
+                      <a
+                        key={a.id}
+                        href={a.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block group"
+                        title={`${a.name} • ${new Date(a.createdAt).toLocaleString()}`}
+                      >
+                        <img
+                          src={a.url}
+                          className="w-full h-28 object-cover rounded border group-hover:opacity-90"
+                          alt={a.name || 'attachment'}
+                          loading="lazy"
+                        />
+                        <div className="mt-1 text-[10px] text-gray-500 truncate">{a.name}</div>
+                      </a>
+                    ))}
+                  </div>
+                )}
+
+                {/* Fallback: show JSON for any unhandled event types */}
+                {!['comment','assigned','created','attachment_added'].includes(ev.eventType) && (
+                  <pre className="text-xs mt-1">{JSON.stringify(payload, null, 2)}</pre>
+                )}
               </div>
-              <pre className="text-xs mt-1">
-                {JSON.stringify(JSON.parse(ev.payloadJson || '{}'), null, 2)}
-              </pre>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         <form onSubmit={addComment} className="flex gap-2">

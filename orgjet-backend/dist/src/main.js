@@ -12,7 +12,7 @@ async function bootstrap() {
     const origin = process.env.CORS_ORIGIN || 'http://localhost:5173';
     app.enableCors({ origin, credentials: true });
     app.use('/uploads', express.static((0, path_1.join)(process.cwd(), 'uploads')));
-    await app.listen(port, '0.0.0.0');
+    await app.listen(process.env.PORT || 3000, '0.0.0.0');
     console.log(`OrgJet API running on http://localhost:${port}`);
 }
 bootstrap();

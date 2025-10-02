@@ -15,6 +15,9 @@ export default function NewRequest() {
   const [showCamera, setShowCamera] = useState(false)       // ← new: modal toggle
   const [submitting, setSubmitting] = useState(false)
   const navigate = useNavigate()
+  const [company, setCompany] = useState('')
+  const [companyId, setCompanyId] = useState('')
+  
 
   useEffect(() => {
     api.get('/requests').then(res => {
@@ -39,6 +42,9 @@ export default function NewRequest() {
       const payload: any = { title, description, typeId, priority }
       const iso = toISOEndOfDay(dueDate)
       if (iso) payload.dueAt = iso
+      if (company.trim()) payload.company = company.trim()
+      if (companyId.trim()) payload.companyId = companyId.trim()
+      
 
       // 1) create request
       const { data } = await api.post('/requests', payload)
@@ -68,6 +74,8 @@ export default function NewRequest() {
         <input className="border rounded w-full p-2" placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} />
         <textarea className="border rounded w-full p-2" placeholder="Description" rows={5} value={description} onChange={e=>setDescription(e.target.value)} />
 
+
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <select className="border rounded p-2" value={typeId} onChange={e=>setTypeId(e.target.value)}>
             {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -77,6 +85,18 @@ export default function NewRequest() {
           </select>
           <input type="date" className="border rounded p-2" value={dueDate} onChange={e=>setDueDate(e.target.value)} aria-label="Due date" />
         </div>
+ <input
+    className="border rounded p-2 md:col-span-2"
+    placeholder="Company"
+    value={company}
+    onChange={e=>setCompany(e.target.value)}
+  />
+  <input
+    className="border rounded p-2"
+    placeholder="ID number"
+    value={companyId}
+    onChange={e=>setCompanyId(e.target.value)}
+  />
 
         {/* Files from disk (also supports mobile camera via file picker) */}
         <div className="space-y-1">

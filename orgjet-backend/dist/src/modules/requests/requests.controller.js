@@ -18,19 +18,24 @@ const passport_1 = require("@nestjs/passport");
 const prisma_service_1 = require("../../prisma.service");
 const class_validator_1 = require("class-validator");
 const platform_express_1 = require("@nestjs/platform-express");
-const common_2 = require("@nestjs/common");
 const multer_1 = require("multer");
 const path_1 = require("path");
 const fs_1 = require("fs");
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
-const STATUSES = ['NEW', 'TRIAGE', 'ASSIGNED', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE', 'CANCELLED'];
-class AssignDto {
+const STATUSES = [
+    'NEW',
+    'TRIAGE',
+    'ASSIGNED',
+    'IN_PROGRESS',
+    'BLOCKED',
+    'REVIEW',
+    'DONE',
+    'CANCELLED',
+];
+function ensureUploadsFolder() {
+    if (!(0, fs_1.existsSync)('uploads'))
+        (0, fs_1.mkdirSync)('uploads', { recursive: true });
 }
-__decorate([
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", Object)
-], AssignDto.prototype, "assigneeId", void 0);
 class CreateRequestDto {
 }
 __decorate([
@@ -59,6 +64,16 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Object)
 ], CreateRequestDto.prototype, "metadata", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateRequestDto.prototype, "company", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateRequestDto.prototype, "companyId", void 0);
 class UpdateRequestDto {
 }
 __decorate([
@@ -68,7 +83,7 @@ __decorate([
 ], UpdateRequestDto.prototype, "status", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    __metadata("design:type", String)
+    __metadata("design:type", Object)
 ], UpdateRequestDto.prototype, "assigneeId", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
@@ -80,16 +95,19 @@ __decorate([
     (0, class_validator_1.IsDateString)(),
     __metadata("design:type", String)
 ], UpdateRequestDto.prototype, "dueAt", void 0);
-function ensureUploadsFolder() {
-    if (!(0, fs_1.existsSync)('uploads'))
-        (0, fs_1.mkdirSync)('uploads', { recursive: true });
-}
 class CommentDto {
 }
 __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CommentDto.prototype, "body", void 0);
+class AssignDto {
+}
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", Object)
+], AssignDto.prototype, "assigneeId", void 0);
 let RequestsController = class RequestsController {
     constructor(prisma) {
         this.prisma = prisma;
@@ -98,11 +116,12 @@ let RequestsController = class RequestsController {
         var _a;
         const where = {};
         if (status) {
-            const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
-            if (statuses.length === 1)
-                where.currentStatus = statuses[0];
-            else
-                where.currentStatus = { in: statuses };
+            const statuses = status
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+            where.currentStatus =
+                statuses.length > 1 ? { in: statuses } : statuses[0];
         }
         if (team)
             where.team = { name: team };
@@ -122,14 +141,14 @@ let RequestsController = class RequestsController {
             include: {
                 type: true,
                 assignee: { select: { id: true, name: true } },
-                team: true
+                team: true,
             },
             orderBy: { updatedAt: 'desc' },
         });
         return { items };
     }
     async create(req, dto) {
-        var _a, _b;
+        var _a, _b, _c, _d;
         const created = await this.prisma.request.create({
             data: {
                 title: dto.title,
@@ -139,6 +158,8 @@ let RequestsController = class RequestsController {
                 createdById: req.user.userId,
                 metadataJson: JSON.stringify(dto.metadata || {}),
                 dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,
+                company: dto.company,
+                companyId: dto.companyId,
             },
         });
         await this.prisma.requestEvent.create({
@@ -146,7 +167,12 @@ let RequestsController = class RequestsController {
                 requestId: created.id,
                 actorId: req.user.userId,
                 eventType: 'created',
-                payloadJson: JSON.stringify({ title: dto.title, dueAt: (_b = dto.dueAt) !== null && _b !== void 0 ? _b : null }),
+                payloadJson: JSON.stringify({
+                    title: dto.title,
+                    dueAt: (_b = dto.dueAt) !== null && _b !== void 0 ? _b : null,
+                    company: (_c = dto.company) !== null && _c !== void 0 ? _c : null,
+                    companyId: (_d = dto.companyId) !== null && _d !== void 0 ? _d : null,
+                }),
             },
         });
         return created;
@@ -158,7 +184,10 @@ let RequestsController = class RequestsController {
                 type: true,
                 assignee: { select: { id: true, name: true } },
                 team: true,
-                events: { include: { actor: true }, orderBy: { createdAt: 'asc' } },
+                events: {
+                    include: { actor: true },
+                    orderBy: { createdAt: 'asc' },
+                },
             },
         });
     }
@@ -167,7 +196,7 @@ let RequestsController = class RequestsController {
             where: { id },
             data: {
                 currentStatus: dto.status,
-                assigneeId: dto.assigneeId,
+                assigneeId: dto.assigneeId === '' ? null : dto.assigneeId,
                 priority: dto.priority,
                 dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,
             },
@@ -182,8 +211,13 @@ let RequestsController = class RequestsController {
         });
         return updated;
     }
+    async presign(req, id, body) {
+        const key = `requests/${id}/${Date.now()}-${Math.round(Math.random() * 1e9)}-${body.filename}`;
+        const { url } = await createPresignedUpload({ key, type: body.mime, bucket: process.env.S3_BUCKET });
+        return { url, key };
+    }
     async comment(req, id, dto) {
-        return this.prisma.requestEvent.create({
+        const ev = await this.prisma.requestEvent.create({
             data: {
                 requestId: id,
                 actorId: req.user.userId,
@@ -192,19 +226,26 @@ let RequestsController = class RequestsController {
             },
             include: { actor: true },
         });
+        return ev;
     }
     async assign(req, id, dto) {
         var _a;
-        const nextAssignee = dto.assigneeId && dto.assigneeId.trim() !== '' ? dto.assigneeId : null;
-        const current = await this.prisma.request.findUnique({ where: { id }, select: { currentStatus: true } });
+        const nextAssignee = dto.assigneeId && dto.assigneeId.toString().trim() !== ''
+            ? dto.assigneeId
+            : null;
+        const current = await this.prisma.request.findUnique({
+            where: { id },
+            select: { currentStatus: true },
+        });
         const data = { assigneeId: nextAssignee };
-        if (nextAssignee && ['NEW', 'TRIAGE'].includes((_a = current === null || current === void 0 ? void 0 : current.currentStatus) !== null && _a !== void 0 ? _a : '')) {
+        if (nextAssignee &&
+            ['NEW', 'TRIAGE'].includes((_a = current === null || current === void 0 ? void 0 : current.currentStatus) !== null && _a !== void 0 ? _a : '')) {
             data.currentStatus = 'ASSIGNED';
         }
         const updated = await this.prisma.request.update({
             where: { id },
             data,
-            include: { assignee: { select: { id: true, name: true } } }
+            include: { assignee: { select: { id: true, name: true } } },
         });
         await this.prisma.requestEvent.create({
             data: {
@@ -219,15 +260,15 @@ let RequestsController = class RequestsController {
     async uploadAttachments(req, id, files) {
         if (!files || files.length === 0)
             return { uploaded: [] };
-        const created = await Promise.all(files.map(f => this.prisma.attachment.create({
+        const created = await Promise.all(files.map((f) => this.prisma.attachment.create({
             data: {
                 requestId: id,
                 uploadedById: req.user.userId,
                 url: `/uploads/${f.filename}`,
                 name: f.originalname,
                 size: f.size,
-                mime: f.mimetype
-            }
+                mime: f.mimetype,
+            },
         })));
         await this.prisma.requestEvent.create({
             data: {
@@ -235,32 +276,25 @@ let RequestsController = class RequestsController {
                 actorId: req.user.userId,
                 eventType: 'attachment_added',
                 payloadJson: JSON.stringify({
-                    attachments: created.map(a => ({
+                    attachments: created.map((a) => ({
                         id: a.id,
                         url: a.url,
                         name: a.name,
                         size: a.size,
                         mime: a.mime,
-                        createdAt: a.createdAt
-                    }))
-                })
-            }
-        });
-        await this.prisma.requestEvent.create({
-            data: {
-                requestId: id,
-                actorId: req.user.userId,
-                eventType: 'attachment_added',
-                payloadJson: JSON.stringify({ count: created.length })
-            }
+                        createdAt: a.createdAt,
+                    })),
+                }),
+            },
         });
         return { uploaded: created };
     }
     async createPost(req, id, files, body) {
         var _a, _b, _c, _d;
         const text = (_d = (_c = (_b = (_a = body === null || body === void 0 ? void 0 : body.text) === null || _a === void 0 ? void 0 : _a.toString) === null || _b === void 0 ? void 0 : _b.call(_a)) !== null && _c !== void 0 ? _c : body === null || body === void 0 ? void 0 : body.text) !== null && _d !== void 0 ? _d : undefined;
-        const created = !files || files.length === 0 ? [] :
-            await Promise.all(files.map(f => this.prisma.attachment.create({
+        const created = !files || files.length === 0
+            ? []
+            : await Promise.all(files.map((f) => this.prisma.attachment.create({
                 data: {
                     requestId: id,
                     uploadedById: req.user.userId,
@@ -268,7 +302,7 @@ let RequestsController = class RequestsController {
                     name: f.originalname,
                     size: f.size,
                     mime: f.mimetype,
-                }
+                },
             })));
         const event = await this.prisma.requestEvent.create({
             data: {
@@ -277,8 +311,13 @@ let RequestsController = class RequestsController {
                 eventType: 'post',
                 payloadJson: JSON.stringify({
                     text: (text || '').trim() || null,
-                    attachments: created.map(a => ({
-                        id: a.id, url: a.url, name: a.name, size: a.size, mime: a.mime, createdAt: a.createdAt
+                    attachments: created.map((a) => ({
+                        id: a.id,
+                        url: a.url,
+                        name: a.name,
+                        size: a.size,
+                        mime: a.mime,
+                        createdAt: a.createdAt,
                     })),
                 }),
             },
@@ -324,6 +363,15 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "update", null);
 __decorate([
+    (0, common_1.Post)(':id/attachments/presign'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:returntype", Promise)
+], RequestsController.prototype, "presign", null);
+__decorate([
     (0, common_1.Post)(':id/comment'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id')),
@@ -342,25 +390,24 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "assign", null);
 __decorate([
-    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Post)(':id/attachments'),
-    (0, common_2.UseInterceptors)((0, platform_express_1.FilesInterceptor)('files', 5, {
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('files', 5, {
         storage: (0, multer_1.diskStorage)({
-            destination: (req, file, cb) => {
+            destination: (_req, _file, cb) => {
                 ensureUploadsFolder();
                 cb(null, 'uploads');
             },
-            filename: (req, file, cb) => {
+            filename: (_req, file, cb) => {
                 const uniq = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
                 cb(null, `${uniq}${(0, path_1.extname)(file.originalname)}`);
-            }
+            },
         }),
-        fileFilter: (req, file, cb) => {
+        fileFilter: (_req, file, cb) => {
             if (!file.mimetype.startsWith('image/'))
                 return cb(null, false);
             cb(null, true);
         },
-        limits: { fileSize: 5 * 1024 * 1024 }
+        limits: { fileSize: 5 * 1024 * 1024 },
     })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id')),
@@ -370,9 +417,8 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "uploadAttachments", null);
 __decorate([
-    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Post)(':id/post'),
-    (0, common_2.UseInterceptors)((0, platform_express_1.FilesInterceptor)('files', 5, {
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('files', 5, {
         storage: (0, multer_1.diskStorage)({
             destination: (_req, _file, cb) => {
                 ensureUploadsFolder();

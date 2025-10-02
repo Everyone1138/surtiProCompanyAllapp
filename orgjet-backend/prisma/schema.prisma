@@ -55,6 +55,8 @@ model Request {
   teamId        String?
   title         String
   description   String
+  company       String?
+  companyId     String?
   priority      String      @default("MEDIUM") // was enum Priority
   currentStatus String      @default("NEW")    // was enum Status
   metadataJson  String      @default("{}")
@@ -62,6 +64,7 @@ model Request {
   slaBreachAt   DateTime?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+  
 
   events        RequestEvent[]
   attachments   Attachment[]

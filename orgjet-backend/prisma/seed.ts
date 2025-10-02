@@ -13,6 +13,57 @@ async function main() {
   const teamIT = await prisma.team.upsert({ where: { name: 'IT' }, update: {}, create: { name: 'IT' } });
   const teamDesign = await prisma.team.upsert({ where: { name: 'Design' }, update: {}, create: { name: 'Design' } });
 
+  // --- New employees (14) ---
+type SeedUser = {
+  name: string;
+  email: string;
+  role: 'REQUESTER' | 'COORDINATOR' | 'ASSIGNEE';
+  team?: 'IT' | 'Design';
+  password: string; // initial password (will be hashed)
+};
+
+const NEW_EMPLOYEES: SeedUser[] = [
+  // Coordinators
+  { name: 'Zoe Adams',   email: 'zadams@orgjet.local',   role: 'COORDINATOR', team: 'IT',     password: 'Orgjet!001' },
+  { name: 'Jack Wilson', email: 'jwilson@orgjet.local',  role: 'COORDINATOR', team: 'Design', password: 'Orgjet!002' },
+
+  // Assignees (IT)
+  { name: 'Ethan Park',  email: 'epark@orgjet.local',    role: 'ASSIGNEE',    team: 'IT',     password: 'Orgjet!003' },
+  { name: 'Grace Lee',   email: 'glee@orgjet.local',     role: 'ASSIGNEE',    team: 'IT',     password: 'Orgjet!004' },
+
+  // Assignees (Design)
+  { name: 'Mateo Garcia', email: 'mgarcia@orgjet.local', role: 'ASSIGNEE',    team: 'Design', password: 'Orgjet!005' },
+  { name: 'Chloe Martin', email: 'cmartin@orgjet.local', role: 'ASSIGNEE',    team: 'Design', password: 'Orgjet!006' },
+
+  // Requesters (no team required)
+  { name: 'Ava Chen',     email: 'achen@orgjet.local',   role: 'REQUESTER',   password: 'Orgjet!007' },
+  { name: 'Liam Patel',   email: 'lpatel@orgjet.local',  role: 'REQUESTER',   password: 'Orgjet!008' },
+  { name: 'Noah Rivera',  email: 'nrivera@orgjet.local', role: 'REQUESTER',   password: 'Orgjet!009' },
+  { name: 'Emma Brooks',  email: 'ebrooks@orgjet.local', role: 'REQUESTER',   password: 'Orgjet!010' },
+  { name: 'Mia Thompson', email: 'mthompson@orgjet.local', role: 'REQUESTER', password: 'Orgjet!011' },
+  { name: 'Oliver Scott', email: 'oscott@orgjet.local',  role: 'REQUESTER',   password: 'Orgjet!012' },
+  { name: 'Lucas Kim',    email: 'lkim@orgjet.local',    role: 'REQUESTER',   password: 'Orgjet!013' },
+  { name: 'Sophia Nguyen', email: 'snguyen@orgjet.local', role: 'REQUESTER',  password: 'Orgjet!014' },
+];
+
+for (const u of NEW_EMPLOYEES) {
+  const hashed = await bcrypt.hash(u.password, 10);
+  await prisma.user.upsert({
+    where: { email: u.email },
+    update: {},
+    create: {
+      name: u.name,
+      email: u.email,
+      password: hashed,
+      role: u.role as any,
+      teamId:
+        u.team === 'IT' ? teamIT.id :
+        u.team === 'Design' ? teamDesign.id :
+        undefined,
+    },
+  });
+}
+
   await prisma.user.upsert({
     where: { email: 'admin@orgjet.local' },
     update: {},

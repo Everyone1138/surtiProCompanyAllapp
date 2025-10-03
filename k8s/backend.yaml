@@ -13,7 +13,8 @@ spec:
     spec:
       containers:
         - name: api
-          image: ghcr.io/GH_USER/BACKEND_REPO:latest
+          image: ghcr.io/everyone1138/orgjet-backend:latest
+
           imagePullPolicy: Always
           env:
             - { name: PORT, value: "3000" }

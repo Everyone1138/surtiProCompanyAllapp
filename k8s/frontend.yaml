@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: ghcr.io/GH_USER/FRONTEND_REPO:latest
+          image: ghcr.io/everyone1138/orgjet-frontend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 80

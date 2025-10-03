@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orgjet-config
+  namespace: orgjet
+data:
+  CORS_ORIGIN: "http://localhost:5173"

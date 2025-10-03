@@ -16,7 +16,7 @@ jobs:
           - name: backend
             context: ./orgjet-backend
             image: orgjet-backend
-            build_args: ""             # none for backend
+            build_args: ""
           - name: frontend
             context: ./orgjet-frontend
             image: orgjet-frontend

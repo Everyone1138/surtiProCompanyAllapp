@@ -211,11 +211,6 @@ let RequestsController = class RequestsController {
         });
         return updated;
     }
-    async presign(req, id, body) {
-        const key = `requests/${id}/${Date.now()}-${Math.round(Math.random() * 1e9)}-${body.filename}`;
-        const { url } = await createPresignedUpload({ key, type: body.mime, bucket: process.env.S3_BUCKET });
-        return { url, key };
-    }
     async comment(req, id, dto) {
         const ev = await this.prisma.requestEvent.create({
             data: {
@@ -362,15 +357,6 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, UpdateRequestDto]),
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "update", null);
-__decorate([
-    (0, common_1.Post)(':id/attachments/presign'),
-    __param(0, (0, common_1.Req)()),
-    __param(1, (0, common_1.Param)('id')),
-    __param(2, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, Object]),
-    __metadata("design:returntype", Promise)
-], RequestsController.prototype, "presign", null);
 __decorate([
     (0, common_1.Post)(':id/comment'),
     __param(0, (0, common_1.Req)()),

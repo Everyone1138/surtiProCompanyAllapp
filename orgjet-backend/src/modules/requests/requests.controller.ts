@@ -197,15 +197,9 @@ export class RequestsController {
     return updated;
   }
 
-@Post(':id/attachments/presign')
-async presign(@Req() req: any, @Param('id') id: string, @Body() body: { filename: string; mime: string }) {
-  const key = `requests/${id}/${Date.now()}-${Math.round(Math.random()*1e9)}-${body.filename}`
-  const { url } = await createPresignedUpload({ key, type: body.mime, bucket: process.env.S3_BUCKET! })
-  // Optionally record a placeholder, or record after client confirms upload
-  return { url, key }
-}
 
 
+  
   // COMMENT event
   @Post(':id/comment')
   async comment(

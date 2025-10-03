@@ -15,5 +15,4 @@ ENV NODE_ENV=production PORT=3000
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY prisma ./prisma
-ENV PORT=3000
 CMD ["node","dist/main.js"]

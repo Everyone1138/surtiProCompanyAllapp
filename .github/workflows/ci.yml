@@ -1,0 +1,134 @@
+name: CI & Images
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*.*.*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  packages: write    # needed to push to GHCR
+  id-token: write    # future-proof (OIDC, optional)
+
+env:
+  NODE_VERSION: '20'
+  # Adjust this for your backend API when building the frontend for prod:
+  # You can also override per environment in repo/environment secrets.
+  VITE_API_BASE: 'http://localhost:3000'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-frontend:
+    name: Frontend – build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: orgjet-frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            orgjet-frontend/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build (Vite)
+        env:
+          VITE_API_BASE: ${{ env.VITE_API_BASE }}
+          # OR set this in repo settings → Actions → Variables/Secrets:
+          # VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+        run: npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: orgjet-frontend/dist
+
+  build-backend:
+    name: Backend – build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: orgjet-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            orgjet-backend/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Generate Prisma
+        run: npx prisma generate
+
+      - name: Build (Nest)
+        run: npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist
+          path: orgjet-backend/dist
+
+  docker:
+    name: Build & Push Docker images (GHCR)
+    runs-on: ubuntu-latest
+    needs: [build-frontend, build-backend]
+    if: github.event_name == 'push'  # push images only on pushes (not PRs)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set image tags
+        id: meta
+        run: |
+          echo "SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
+      # FRONTEND image
+      - name: Build & push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./orgjet-frontend
+          file: ./orgjet-frontend/Dockerfile
+          push: true
+          build-args: |
+            VITE_API_BASE=${{ env.VITE_API_BASE }}
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.OWNER_LC }}/orgjet-frontend:latest
+            ghcr.io/${{ steps.meta.outputs.OWNER_LC }}/orgjet-frontend:${{ steps.meta.outputs.SHA_SHORT }}
+
+      # BACKEND image
+      - name: Build & push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./orgjet-backend
+          file: ./orgjet-backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.OWNER_LC }}/orgjet-backend:latest
+            ghcr.io/${{ steps.meta.outputs.OWNER_LC }}/orgjet-backend:${{ steps.meta.outputs.SHA_SHORT }}

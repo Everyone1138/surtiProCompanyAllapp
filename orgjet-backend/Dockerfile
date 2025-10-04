@@ -22,29 +22,27 @@ COPY src ./src
 # Build your app (e.g., tsc or nest build)
 RUN npm run build
 
-# Prisma client baked into node_modules for the final image
-RUN npx prisma generate
-
-# Strip devDependencies for smaller runtime
-RUN npm prune --omit=dev
-
-# ---------- runtime (lean) ----------
-FROM node:20-alpine AS runner
+FROM node:20-alpine AS deps
 WORKDIR /app
-ENV NODE_ENV=production \
-    PORT=3000
-RUN apk add --no-cache curl
+COPY package*.json ./
+RUN npm ci
 
-# Non-root for security
-RUN addgroup -S nodejs && adduser -S node -G nodejs
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npx prisma generate
+RUN npm run build
 
-# Copy pruned node_modules and built dist only
-COPY --from=build /app/node_modules ./node_modules
+FROM node:20-alpine AS prod
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-# Keep prisma folder (migrations/schema) if your app reads it at runtime
 COPY prisma ./prisma
 
-USER node
+# prisma needs access at runtime if you use migrations or seed; adjust as needed
+# RUN npx prisma migrate deploy  # usually run at container start if desired
+
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
-CMD ["node","dist/main.js"]
+CMD ["node", "dist/main.js"]

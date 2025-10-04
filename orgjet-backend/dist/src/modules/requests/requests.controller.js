@@ -21,6 +21,8 @@ const platform_express_1 = require("@nestjs/platform-express");
 const multer_1 = require("multer");
 const path_1 = require("path");
 const fs_1 = require("fs");
+const fs_2 = require("fs");
+const path = require("path");
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 const STATUSES = [
     'NEW',
@@ -83,10 +85,6 @@ __decorate([
 ], UpdateRequestDto.prototype, "status", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    __metadata("design:type", Object)
-], UpdateRequestDto.prototype, "assigneeId", void 0);
-__decorate([
-    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsIn)(PRIORITIES),
     __metadata("design:type", String)
 ], UpdateRequestDto.prototype, "priority", void 0);
@@ -101,27 +99,16 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CommentDto.prototype, "body", void 0);
-class AssignDto {
-}
-__decorate([
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", Object)
-], AssignDto.prototype, "assigneeId", void 0);
 let RequestsController = class RequestsController {
     constructor(prisma) {
         this.prisma = prisma;
     }
     async list(req, status, team, type, search, mine) {
-        var _a;
+        var _a, _b;
         const where = {};
         if (status) {
-            const statuses = status
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean);
-            where.currentStatus =
-                statuses.length > 1 ? { in: statuses } : statuses[0];
+            const statuses = status.split(',').map((s) => s.trim()).filter(Boolean);
+            where.currentStatus = statuses.length > 1 ? { in: statuses } : statuses[0];
         }
         if (team)
             where.team = { name: team };
@@ -133,15 +120,30 @@ let RequestsController = class RequestsController {
                 { description: { contains: search, mode: 'insensitive' } },
             ];
         }
-        if (mine === '1' && ((_a = req === null || req === void 0 ? void 0 : req.user) === null || _a === void 0 ? void 0 : _a.userId)) {
-            where.assigneeId = req.user.userId;
+        const uid = ((_a = req === null || req === void 0 ? void 0 : req.user) === null || _a === void 0 ? void 0 : _a.userId) || ((_b = req === null || req === void 0 ? void 0 : req.user) === null || _b === void 0 ? void 0 : _b.id);
+        if (mine === '1' && uid) {
+            const mineOr = [
+                { assignments: { some: { userId: uid } } },
+                { assigneeId: uid },
+            ];
+            if (where.OR) {
+                where.OR = [...where.OR, ...mineOr];
+            }
+            else {
+                where.__mineOr = mineOr;
+            }
+        }
+        let finalWhere = where;
+        if (where.__mineOr) {
+            const { __mineOr, ...rest } = where;
+            finalWhere = { AND: [rest, { OR: __mineOr }] };
         }
         const items = await this.prisma.request.findMany({
-            where,
+            where: finalWhere,
             include: {
                 type: true,
-                assignee: { select: { id: true, name: true } },
                 team: true,
+                assignments: { include: { user: { select: { id: true, name: true } } } },
             },
             orderBy: { updatedAt: 'desc' },
         });
@@ -182,12 +184,9 @@ let RequestsController = class RequestsController {
             where: { id },
             include: {
                 type: true,
-                assignee: { select: { id: true, name: true } },
                 team: true,
-                events: {
-                    include: { actor: true },
-                    orderBy: { createdAt: 'asc' },
-                },
+                assignments: { include: { user: { select: { id: true, name: true } } } },
+                events: { include: { actor: true }, orderBy: { createdAt: 'asc' } },
             },
         });
     }
@@ -196,7 +195,6 @@ let RequestsController = class RequestsController {
             where: { id },
             data: {
                 currentStatus: dto.status,
-                assigneeId: dto.assigneeId === '' ? null : dto.assigneeId,
                 priority: dto.priority,
                 dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,
             },
@@ -223,34 +221,143 @@ let RequestsController = class RequestsController {
         });
         return ev;
     }
-    async assign(req, id, dto) {
-        var _a;
-        const nextAssignee = dto.assigneeId && dto.assigneeId.toString().trim() !== ''
-            ? dto.assigneeId
-            : null;
-        const current = await this.prisma.request.findUnique({
-            where: { id },
-            select: { currentStatus: true },
+    async remove(req, id) {
+        const me = await this.prisma.user.findUnique({
+            where: { id: req.user.userId || req.user.id },
+            select: { id: true, role: true }
         });
-        const data = { assigneeId: nextAssignee };
-        if (nextAssignee &&
-            ['NEW', 'TRIAGE'].includes((_a = current === null || current === void 0 ? void 0 : current.currentStatus) !== null && _a !== void 0 ? _a : '')) {
-            data.currentStatus = 'ASSIGNED';
-        }
-        const updated = await this.prisma.request.update({
+        const request = await this.prisma.request.findUnique({
             where: { id },
-            data,
-            include: { assignee: { select: { id: true, name: true } } },
+            select: { id: true, createdById: true }
+        });
+        if (!request)
+            throw new common_1.NotFoundException('Request not found');
+        const amOwner = request.createdById === (me === null || me === void 0 ? void 0 : me.id);
+        const isPrivileged = (me === null || me === void 0 ? void 0 : me.role) === 'ADMIN' || (me === null || me === void 0 ? void 0 : me.role) === 'COORDINATOR';
+        if (!amOwner && !isPrivileged) {
+            throw new common_1.ForbiddenException('Not allowed to delete this request');
+        }
+        const attachments = await this.prisma.attachment.findMany({
+            where: { requestId: id },
+            select: { url: true }
+        });
+        await this.prisma.$transaction([
+            this.prisma.requestEvent.deleteMany({ where: { requestId: id } }),
+            this.prisma.requestAssignee.deleteMany({ where: { requestId: id } }),
+            this.prisma.subscription.deleteMany({ where: { requestId: id } }),
+            this.prisma.attachment.deleteMany({ where: { requestId: id } }),
+            this.prisma.request.delete({ where: { id } }),
+        ]);
+        for (const a of attachments) {
+            try {
+                const rel = a.url.replace(/^\//, '');
+                const abs = path.join(process.cwd(), rel);
+                (0, fs_2.unlinkSync)(abs);
+            }
+            catch (_a) {
+            }
+        }
+        return { ok: true };
+    }
+    async assign(req, id, dto) {
+        var _a, _b;
+        const trimmed = (_b = (_a = dto.assigneeId) === null || _a === void 0 ? void 0 : _a.toString().trim()) !== null && _b !== void 0 ? _b : '';
+        const nextAssignee = trimmed !== '' ? trimmed : null;
+        if (nextAssignee === null) {
+            await this.prisma.requestAssignee.deleteMany({ where: { requestId: id } });
+            await this.prisma.requestEvent.create({
+                data: {
+                    requestId: id,
+                    actorId: req.user.userId,
+                    eventType: 'assignees_cleared',
+                    payloadJson: '{}',
+                },
+            });
+        }
+        else {
+            const exists = await this.prisma.requestAssignee.findFirst({
+                where: { requestId: id, userId: nextAssignee },
+                select: { id: true },
+            });
+            if (!exists) {
+                await this.prisma.requestAssignee.create({
+                    data: { requestId: id, userId: nextAssignee },
+                });
+            }
+            const current = await this.prisma.request.findUnique({
+                where: { id }, select: { currentStatus: true }
+            });
+            if (current && ['NEW', 'TRIAGE'].includes(current.currentStatus)) {
+                await this.prisma.request.update({
+                    where: { id }, data: { currentStatus: 'ASSIGNED' }
+                });
+            }
+            await this.prisma.requestEvent.create({
+                data: {
+                    requestId: id,
+                    actorId: req.user.userId,
+                    eventType: 'assignees_added',
+                    payloadJson: JSON.stringify({ userIds: [nextAssignee] }),
+                },
+            });
+        }
+        return this.prisma.request.findUnique({
+            where: { id },
+            include: {
+                type: true,
+                team: true,
+                assignments: { include: { user: { select: { id: true, name: true } } } },
+            },
+        });
+    }
+    async addAssignees(req, id, body) {
+        const userIds = Array.isArray(body === null || body === void 0 ? void 0 : body.userIds) ? body.userIds.filter(Boolean) : [];
+        if (userIds.length === 0)
+            return { ok: true, added: 0 };
+        const existing = await this.prisma.requestAssignee.findMany({
+            where: { requestId: id, userId: { in: userIds } },
+            select: { userId: true },
+        });
+        const existingSet = new Set(existing.map((e) => e.userId));
+        const toCreate = userIds
+            .filter((u) => !existingSet.has(u))
+            .map((u) => ({ requestId: id, userId: u }));
+        if (toCreate.length > 0) {
+            await this.prisma.requestAssignee.createMany({ data: toCreate });
+        }
+        const current = await this.prisma.request.findUnique({
+            where: { id }, select: { currentStatus: true }
+        });
+        if (current && ['NEW', 'TRIAGE'].includes(current.currentStatus)) {
+            await this.prisma.request.update({
+                where: { id }, data: { currentStatus: 'ASSIGNED' }
+            });
+        }
+        await this.prisma.requestEvent.create({
+            data: {
+                requestId: id,
+                actorId: req.user.userId,
+                eventType: 'assignees_added',
+                payloadJson: JSON.stringify({ userIds }),
+            },
+        });
+        return { ok: true, added: toCreate.length };
+    }
+    async removeAssignee(req, id, body) {
+        if (!(body === null || body === void 0 ? void 0 : body.userId))
+            return { ok: true, removed: 0 };
+        await this.prisma.requestAssignee.deleteMany({
+            where: { requestId: id, userId: body.userId },
         });
         await this.prisma.requestEvent.create({
             data: {
                 requestId: id,
                 actorId: req.user.userId,
-                eventType: 'assigned',
-                payloadJson: JSON.stringify({ assigneeId: nextAssignee }),
+                eventType: 'assignee_removed',
+                payloadJson: JSON.stringify({ userId: body.userId }),
             },
         });
-        return updated;
+        return { ok: true, removed: 1 };
     }
     async uploadAttachments(req, id, files) {
         if (!files || files.length === 0)
@@ -367,14 +474,40 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "comment", null);
 __decorate([
+    (0, common_1.Delete)(':id'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], RequestsController.prototype, "remove", null);
+__decorate([
     (0, common_1.Post)(':id/assign'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id')),
     __param(2, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, AssignDto]),
+    __metadata("design:paramtypes", [Object, String, Object]),
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "assign", null);
+__decorate([
+    (0, common_1.Post)(':id/assignees'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:returntype", Promise)
+], RequestsController.prototype, "addAssignees", null);
+__decorate([
+    (0, common_1.Patch)(':id/assignees/remove'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:returntype", Promise)
+], RequestsController.prototype, "removeAssignee", null);
 __decorate([
     (0, common_1.Post)(':id/attachments'),
     (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('files', 5, {

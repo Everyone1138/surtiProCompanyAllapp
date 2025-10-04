@@ -8,13 +8,19 @@ import MyWork from './pages/MyWork'
 import Board from './pages/Board'
 import NewRequest from './pages/NewRequest'
 import RequestDetail from './pages/RequestDetail'
+import RouteError from './components/RouteError';
+import RequestsList from './pages/RequestsList'
 
 const router = createBrowserRouter([
-  { path: '/', element: <App />, children: [
+  { path: '/', element: <App />, errorElement: <RouteError />,children: [
     { index: true, element: <MyWork /> },
     { path: 'board', element: <Board /> },
     { path: 'new', element: <NewRequest /> },
-    { path: 'r/:id', element: <RequestDetail /> },
+    { path: 'r/:id', element: <RequestDetail /> },      { path: 'my-work', element: <MyWork />, errorElement: <RouteError /> },
+    { path: 'my-work', element: <MyWork />, errorElement: <RouteError /> },
+    { path: 'requests', element: <RequestsList />, errorElement: <RouteError /> },
+    { path: 'requests/:id', element: <RequestDetail />, errorElement: <RouteError /> },
+    { path: '*', element: <RouteError /> },
   ]},
   { path: '/login', element: <Login /> },
 ])

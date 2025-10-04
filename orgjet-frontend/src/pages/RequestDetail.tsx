@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { deleteRequest } from '../lib/api';
 import { useLocation } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
-import { App } from './App';
+
 
 export default function RequestDetail() {
   const { id } = useParams();

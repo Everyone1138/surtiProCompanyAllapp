@@ -14,16 +14,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        include:
-          - app: backend
-            image: orgjet-backend
-            context: backend
-            dockerfile: backend/Dockerfile
-          - app: frontend
-            image: orgjet-frontend
-            context: frontend
-            dockerfile: frontend/Dockerfile
+        matrix:
+          include:
+            - app: backend
+              image: orgjet-backend
+              context: orgjet-backend
+              dockerfile: orgjet-backend/Dockerfile
+            - app: frontend
+              image: orgjet-frontend
+              context: orgjet-frontend
+              dockerfile: orgjet-frontend/Dockerfile
 
     steps:
       - uses: actions/checkout@v4

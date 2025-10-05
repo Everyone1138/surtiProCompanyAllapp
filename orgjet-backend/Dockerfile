@@ -1,34 +1,37 @@
 # ---------- base ----------
 FROM node:20-alpine AS base
 WORKDIR /app
-# Useful for Prisma and healthchecks
-RUN apk add --no-cache openssl curl
+# Prisma likes openssl; curl not needed here
+RUN apk add --no-cache openssl
 
-# ---------- deps (install deps without running postinstall) ----------
+# ---------- deps ----------
 FROM base AS install_deps
-# Copy only what's needed to install deps + let prisma be visible if scripts ever run
 COPY package*.json ./
 COPY prisma ./prisma
-# Avoid running "postinstall" (which tries prisma generate) at this point
+# Avoid triggering postinstall here
 RUN npm ci --ignore-scripts
 
-# ---------- build (compile TS and generate Prisma client) ----------
+# ---------- build ----------
 FROM base AS build_app
-# Bring in node_modules from deps
+# bring installed modules
 COPY --from=install_deps /app/node_modules ./node_modules
 
-# Copy the rest of your source
-# Adjust these lines to match your repo (Nest/TS assumed)
+# 👇 THIS LINE FIXES YOUR ERROR
+COPY package*.json ./          # <-- needed so `npm run build` can read scripts
+
+# your build-time files
 COPY tsconfig*.json ./
+# If you use Nest/Nx/etc., include their config as needed:
+# COPY nest-cli.json ./
+# COPY nx.json ./
+# COPY package-lock.json ./
 COPY src ./src
 COPY prisma ./prisma
 
-# Now generate Prisma client and build your app
 RUN npx prisma generate
-# If you have a build script (e.g. tsc / nest build)
 RUN npm run build
 
-# Prune dev deps to shrink runtime
+# shrink deps for runtime
 RUN npm prune --omit=dev
 
 # ---------- runtime ----------
@@ -36,16 +39,12 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000
-
-# curl is only needed for the healthcheck
 RUN apk add --no-cache curl
 
-# Use the pre-existing 'node' user from the base image
-# (no adduser/addgroup needed)
+# use the pre-existing 'node' user in the image
 COPY --from=build_app /app/node_modules ./node_modules
 COPY --from=build_app /app/dist ./dist
-# Keep prisma only if your app needs it at runtime (migrations, etc.)
-COPY prisma ./prisma
+COPY prisma ./prisma  # keep only if needed at runtime
 
 USER node
 EXPOSE 3000

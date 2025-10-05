@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var _a, _b, _c;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RequestsController = void 0;
 const common_1 = require("@nestjs/common");
@@ -55,7 +56,7 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsIn)(PRIORITIES),
-    __metadata("design:type", String)
+    __metadata("design:type", typeof (_a = typeof Priority !== "undefined" && Priority) === "function" ? _a : Object)
 ], CreateRequestDto.prototype, "priority", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
@@ -81,12 +82,12 @@ class UpdateRequestDto {
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsIn)(STATUSES),
-    __metadata("design:type", String)
+    __metadata("design:type", typeof (_b = typeof Status !== "undefined" && Status) === "function" ? _b : Object)
 ], UpdateRequestDto.prototype, "status", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsIn)(PRIORITIES),
-    __metadata("design:type", String)
+    __metadata("design:type", typeof (_c = typeof Priority !== "undefined" && Priority) === "function" ? _c : Object)
 ], UpdateRequestDto.prototype, "priority", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),

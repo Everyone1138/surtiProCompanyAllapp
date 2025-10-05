@@ -36,18 +36,19 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000
+
+# curl is only needed for the healthcheck
 RUN apk add --no-cache curl
 
-# Non-root for security
-RUN addgroup -S nodejs && adduser -S node -G nodejs
-
-# Copy in the minimal runtime bits
+# Use the pre-existing 'node' user from the base image
+# (no adduser/addgroup needed)
 COPY --from=build_app /app/node_modules ./node_modules
 COPY --from=build_app /app/dist ./dist
-# Keep prisma/ only if your app needs it at runtime (migrations, etc.)
+# Keep prisma only if your app needs it at runtime (migrations, etc.)
 COPY prisma ./prisma
 
 USER node
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
 CMD ["node","dist/main.js"]

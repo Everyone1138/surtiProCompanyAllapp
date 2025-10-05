@@ -1,48 +1,53 @@
 # ---------- base ----------
 FROM node:20-alpine AS base
 WORKDIR /app
-# Needed by Prisma on alpine + for healthcheck
+# Useful for Prisma and healthchecks
 RUN apk add --no-cache openssl curl
 
-# ---------- deps (install with dev deps for build) ----------
-FROM base AS deps
+# ---------- deps (install deps without running postinstall) ----------
+FROM base AS install_deps
+# Copy only what's needed to install deps + let prisma be visible if scripts ever run
 COPY package*.json ./
-# If you rely on postinstall prisma generate, keep prisma folder here too:
 COPY prisma ./prisma
-RUN npm ci
+# Avoid running "postinstall" (which tries prisma generate) at this point
+RUN npm ci --ignore-scripts
 
-# ---------- build (compile TS, generate prisma client) ----------
-FROM deps AS build
-# Copy the rest only now to maximize layer cache
+# ---------- build (compile TS and generate Prisma client) ----------
+FROM base AS build_app
+# Bring in node_modules from deps
+COPY --from=install_deps /app/node_modules ./node_modules
+
+# Copy the rest of your source
+# Adjust these lines to match your repo (Nest/TS assumed)
 COPY tsconfig*.json ./
 COPY src ./src
-# If you have other build-time files (nest-cli.json, .env.example, etc.), copy them too.
-# COPY nest-cli.json ./
-
-# Build your app (e.g., tsc or nest build)
-RUN npm run build
-
-FROM node:20-alpine AS deps
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-
-FROM node:20-alpine AS build
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN npx prisma generate
-RUN npm run build
-
-FROM node:20-alpine AS prod
-WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
 COPY prisma ./prisma
 
-# prisma needs access at runtime if you use migrations or seed; adjust as needed
-# RUN npx prisma migrate deploy  # usually run at container start if desired
+# Now generate Prisma client and build your app
+RUN npx prisma generate
+# If you have a build script (e.g. tsc / nest build)
+RUN npm run build
 
+# Prune dev deps to shrink runtime
+RUN npm prune --omit=dev
+
+# ---------- runtime ----------
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production \
+    PORT=3000
+RUN apk add --no-cache curl
+
+# Non-root for security
+RUN addgroup -S nodejs && adduser -S node -G nodejs
+
+# Copy in the minimal runtime bits
+COPY --from=build_app /app/node_modules ./node_modules
+COPY --from=build_app /app/dist ./dist
+# Keep prisma/ only if your app needs it at runtime (migrations, etc.)
+COPY prisma ./prisma
+
+USER node
 EXPOSE 3000
-CMD ["node", "dist/main.js"]
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
+CMD ["node","dist/main.js"]

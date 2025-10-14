@@ -75,3 +75,76 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  mirror-to-ecr:
+     needs: build
+     runs-on: ubuntu-latest
+     permissions:
+      id-token: write
+      contents: read
+     env:
+      AWS_REGION: us-east-1         # change if needed
+      ECR_BACKEND_REPO: orgjet-backend
+      ECR_FRONTEND_REPO: orgjet-frontend
+     steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::<YOUR_AWS_ACCOUNT_ID>:role/github-oidc-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Create ECR repos if missing
+        run: |
+          aws ecr describe-repositories --repository-names "$ECR_BACKEND_REPO" || aws ecr create-repository --repository-name "$ECR_BACKEND_REPO"
+          aws ecr describe-repositories --repository-names "$ECR_FRONTEND_REPO" || aws ecr create-repository --repository-name "$ECR_FRONTEND_REPO"
+
+      - name: Mirror images (latest + branch + sha)
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          REGION=${AWS_REGION}
+
+          # tags to mirror (adjust if you like)
+          TAGS="latest main sha-${{ github.sha }}"
+
+          for APP in backend frontend; do
+            GHCR_IMG="ghcr.io/${{ github.repository_owner }}/orgjet-${APP}"
+            ECR_IMG="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/orgjet-${APP}"
+
+            for T in $TAGS; do
+              echo "Pull $GHCR_IMG:$T"
+              docker pull "$GHCR_IMG:$T"
+
+              echo "Tag -> $ECR_IMG:$T"
+              docker tag "$GHCR_IMG:$T" "$ECR_IMG:$T"
+
+              echo "Push $ECR_IMG:$T"
+              docker push "$ECR_IMG:$T"
+            done
+          done
+
+
+  deploy-ecs:
+    needs: mirror-to-ecr
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+     - uses: aws-actions/configure-aws-credentials@v4
+       with:
+         role-to-assume: arn:aws:iam::<YOUR_ACCOUNT_ID>:role/github-oidc-deploy
+         aws-region: us-east-1
+     - run: aws ecs update-service --cluster orgjet --service orgjet-backend-svc --force-new-deployment
+     - run: aws ecs update-service --cluster orgjet --service orgjet-frontend-svc --force-new-deployment

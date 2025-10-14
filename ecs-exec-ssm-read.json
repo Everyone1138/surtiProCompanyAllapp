@@ -1,0 +1,11 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadOrgjetParams",
+      "Effect": "Allow",
+      "Action": [ "ssm:GetParameter" ],
+      "Resource": "arn:aws:ssm:us-east-1:567578056281:parameter/prod/orgjet/*"
+    }
+  ]
+}

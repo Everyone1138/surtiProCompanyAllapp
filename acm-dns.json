@@ -1,0 +1,12 @@
+[
+    {
+        "Name": "_e3583a75671fb17807980adee27cf510.workjetworks.com.",
+        "Type": "CNAME",
+        "Value": "_049ba17f245e5d6d65a1c9c4275eb187.xlfgrmvvlj.acm-validations.aws."
+    },
+    {
+        "Name": "_6dabf549f9048d5e47ea86caa7fadd24.www.workjetworks.com.",
+        "Type": "CNAME",
+        "Value": "_30851b5e53cd1e81d76c7bf194f879ea.xlfgrmvvlj.acm-validations.aws."
+    }
+]

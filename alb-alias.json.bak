@@ -1,0 +1,29 @@
+{
+  "Comment": "ALB alias records",
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "workjetworks.com",
+        "Type": "A",
+        "AliasTarget": {
+          "HostedZoneId": "",
+          "DNSName": "ALB_DNS_PLACEHOLDER",
+          "EvaluateTargetHealth": false
+        }
+      }
+    },
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "www.workjetworks.com",
+        "Type": "A",
+        "AliasTarget": {
+          "HostedZoneId": "",
+          "DNSName": "ALB_DNS_PLACEHOLDER",
+          "EvaluateTargetHealth": false
+        }
+      }
+    }
+  ]
+}

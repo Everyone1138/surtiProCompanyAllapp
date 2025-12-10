@@ -1,37 +1,33 @@
 {
-    "family": "orgjet-backend",
-    "networkMode": "awsvpc",
-    "requiresCompatibilities": ["FARGATE"],
-    "cpu": "256",
-    "memory": "512",
-    "executionRoleArn": "arn:aws:iam:::role/ecsTaskExecutionRole",
-    "taskRoleArn": "arn:aws:iam:::role/orgjetTaskRole",
-    "containerDefinitions": [{
-        "name": "api",
-        "image": ".dkr.ecr..amazonaws.com/orgjet-backend:latest",
-        "essential": true,
-        "portMappings": [{ "containerPort": 3000, "protocol": "tcp" }],
-        "environment": [
-            { "name": "NODE_ENV", "value": "production" },
-            { "name": "PORT", "value": "3000" }
-        ],
-        "logConfiguration": {
-            "logDriver": "awslogs",
-            "options": {
-                "awslogs-group": "/ecs/orgjet-backend",
-                "awslogs-region": "",
-                "awslogs-stream-prefix": "ecs"
-            }
-        },
-        "healthCheck": {
-            "command": ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"],
-            "interval": 30,
-            "timeout": 5,
-            "retries": 3,
-            "startPeriod": 10
-        },
-        "secrets": [
-            { "name": "DATABASE_URL", "valueFrom": "arn:aws:ssm:us-east-1:<ACCOUNT_ID>:parameter/prod/orgjet/DATABASE_URL" }
-        ]
-    }]
+  "family": "orgjet-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::567578056281:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::567578056281:role/orgjetTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "567578056281.dkr.ecr.us-east-1.amazonaws.com/orgjet-backend:latest",
+      "essential": true,
+      "portMappings": [{ "containerPort": 3000, "protocol": "tcp" }],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "PORT", "value": "3000" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/orgjet-backend",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL","wget -qO- http://localhost:3000/health || exit 1"],
+        "interval": 30, "timeout": 5, "retries": 3, "startPeriod": 10
+      }
+    }
+  ]
 }

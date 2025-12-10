@@ -1,7 +1,5 @@
 # ----- base -----
-FROM node:20-alpine AS base
-WORKDIR /app
-RUN apk add --no-cache openssl
+
 
 # ----- deps -----
 FROM base AS install_deps

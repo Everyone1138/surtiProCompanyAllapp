@@ -53,8 +53,6 @@ jobs:
       - name: Build (Vite)
         env:
           VITE_API_BASE: ${{ env.VITE_API_BASE }}
-          # OR set this in repo settings → Actions → Variables/Secrets:
-          # VITE_API_BASE: ${{ vars.VITE_API_BASE }}
         run: npm run build
 
       - name: Upload dist artifact

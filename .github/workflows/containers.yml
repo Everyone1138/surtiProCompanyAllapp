@@ -100,12 +100,40 @@ jobs:
             *) echo "ERROR: Role ARN must look like arn:aws:iam::ACCOUNT_ID:role/ROLE_NAME"; exit 1;;
           esac
 
+
+      - name: Show OIDC token claims (aud, sub)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Requesting GitHub OIDC token…"
+          RESP=$(curl -sSf -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")
+          TOKEN=$(echo "$RESP" | jq -r .value)
+          echo "OIDC token acquired. Decoding payload…"
+          PAYLOAD=$(python - <<'PY'
+          import os,sys,base64,json
+          tok=os.environ["TOKEN"]
+          payload=tok.split(".")[1] + "=="
+          print(base64.urlsafe_b64decode(payload).decode())
+          PY
+          )
+          echo "$PAYLOAD" | jq '{iss, aud, sub}'
+        env:
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
+          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
+
+
+
+
+
+
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           role-session-name: orgjet-deploy
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: us-east-1
 
       - name: Who am I?
         run: aws sts get-caller-identity

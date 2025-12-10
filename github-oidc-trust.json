@@ -1,16 +1,23 @@
 {
-  "Version":"2012-10-17",
-  "Statement":[
-    {
-      "Effect":"Allow",
-      "Principal":{"Federated":"arn:aws:iam::567578056281:oidc-provider/token.actions.githubusercontent.com"},
-      "Action":"sts:AssumeRoleWithWebIdentity",
-      "Condition":{
-        "StringEquals":{"token.actions.githubusercontent.com:aud":"sts.amazonaws.com"},
-        "StringLike":{"token.actions.githubusercontent.com:sub":[
-          "repo:Everyone1138/surtiProCompanyAllapp:ref:refs/heads/main"
-        ]}
-      }
-    }
-  ]
+    "Version": "2012-10-17",
+    "Statement": [{
+        "Effect": "Allow",
+        "Principal": {
+            "Federated": "arn:aws:iam::567578056281:oidc-provider/token.actions.githubusercontent.com"
+        },
+        "Action": "sts:AssumeRoleWithWebIdentity",
+        "Condition": {
+            "StringEquals": {
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+            },
+            "StringLike": {
+                "token.actions.githubusercontent.com:sub": [
+                    "repo:Everyone1138/surtiProCompanyAllapp:ref:refs/heads/*",
+                    "repo:Everyone1138/surtiProCompanyAllapp:ref:refs/tags/*",
+                    "repo:Everyone1138/surtiProCompanyAllapp:pull_request",
+                    "repo:Everyone1138/surtiProCompanyAllapp:environment:*"
+                ]
+            }
+        }
+    }]
 }

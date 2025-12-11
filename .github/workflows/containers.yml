@@ -76,8 +76,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-          
-   mirror-to-ecr:
+
+mirror-to-ecr:
    needs: build
    runs-on: ubuntu-latest
    permissions:

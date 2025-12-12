@@ -168,22 +168,36 @@ jobs:
 
 
       - name: Mirror images (latest + branch + sha)
+        shell: bash
         run: |
+          set -euo pipefail
+
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           REGION=${AWS_REGION}
+          OWNER_LC="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+
+          echo "AWS Account: $ACCOUNT_ID"
+          echo "Region: $REGION"
+          echo "GH owner (lc): $OWNER_LC"
+
           TAGS="latest main sha-${{ github.sha }}"
+
           for APP in backend frontend; do
-            GHCR_IMG="ghcr.io/${{ github.repository_owner_lc }}/orgjet-${APP}"
-            ECR_IMG="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/orgjet-${APP}"
-            for T in $TAGS; do
-              echo "Pull $GHCR_IMG:$T"
-              docker pull "$GHCR_IMG:$T"
-              echo "Tag -> $ECR_IMG:$T"
-              docker tag "$GHCR_IMG:$T" "$ECR_IMG:$T"
-              echo "Push $ECR_IMG:$T"
-              docker push "$ECR_IMG:$T"
-            done
+           GHCR_IMG="ghcr.io/${OWNER_LC}/orgjet-${APP}"
+           ECR_IMG="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/orgjet-${APP}"
+
+           for T in $TAGS; do
+             echo "Pull $GHCR_IMG:$T"
+             docker pull "$GHCR_IMG:$T"
+
+             echo "Tag -> $ECR_IMG:$T"
+             docker tag "$GHCR_IMG:$T" "$ECR_IMG:$T"
+
+             echo "Push $ECR_IMG:$T"
+             docker push "$ECR_IMG:$T"
+           done
           done
+
 
   deploy-ecs:
     needs: mirror-to-ecr

@@ -162,13 +162,18 @@ jobs:
           aws ecr describe-repositories --repository-names "$ECR_BACKEND_REPO" || aws ecr create-repository --repository-name "$ECR_BACKEND_REPO"
           aws ecr describe-repositories --repository-names "$ECR_FRONTEND_REPO" || aws ecr create-repository --repository-name "$ECR_FRONTEND_REPO"
 
+      - name: Compute lowercase owner
+        id: ow
+        run: echo "owner_lc=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+
       - name: Mirror images (latest + branch + sha)
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           REGION=${AWS_REGION}
           TAGS="latest main sha-${{ github.sha }}"
           for APP in backend frontend; do
-            GHCR_IMG="ghcr.io/${{ github.repository_owner }}/orgjet-${APP}"
+            GHCR_IMG="ghcr.io/${{ github.repository_owner_lc }}/orgjet-${APP}"
             ECR_IMG="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/orgjet-${APP}"
             for T in $TAGS; do
               echo "Pull $GHCR_IMG:$T"

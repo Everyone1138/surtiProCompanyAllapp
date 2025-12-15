@@ -1,4 +1,4 @@
-name: Deploy Pages (no Jekyll)
+name: Deploy Docs to Pages (no Jekyll)
 on:
   push:
     branches: [ main ]
@@ -6,6 +6,11 @@ on:
 permissions:
   pages: write
   id-token: write
+  contents: read
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -14,23 +19,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: Prepare site
         run: |
-          rm -rf site
-          mkdir -p site
-          echo "<h1>OrgJet docs</h1>" > site/index.html
-          touch site/.nojekyll   # <-- prevents Jekyll/Liquid parsing
+          # publish exactly what's under docs/
+          # ensure .nojekyll exists (to avoid Liquid/Jekyll parsing)
+          test -f docs/.nojekyll || touch docs/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: docs
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4

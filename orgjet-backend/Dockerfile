@@ -1,34 +1,36 @@
-# -------- Build stage --------
+# ---- build ----
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Install deps first for cache hits
+# Install deps
 COPY package*.json ./
 RUN npm ci
 
-# Copy source and build
+# Copy source and Prisma schema
 COPY . .
-# If you use Prisma or other codegen, add those here before build
-# RUN npx prisma generate
+# Generate Prisma client (needs schema.prisma in ./prisma/)
+RUN npx prisma generate
+
+# Build Nest -> dist/
 RUN npm run build
 
-# -------- Runtime stage --------
-FROM node:20-alpine AS runner
+# ---- runtime ----
+FROM node:20-alpine
 WORKDIR /app
-
 ENV NODE_ENV=production
-ENV PORT=3000
 
-# Only production deps
+# Copy only what’s needed to run
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# Bring the compiled app
+# Copy compiled app and Prisma artifacts
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /app/prisma ./prisma
 
-# If you serve static uploads inside the container, ensure the dir exists:
-# RUN mkdir -p /app/uploads
+# If you run migrations at start (optional):
+# ENV DATABASE_URL=...
+# CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
 
 EXPOSE 3000
-# Start the compiled app
-CMD ["node", "src/main.js"]
+CMD ["node", "dist/main.js"]

@@ -31,4 +31,4 @@ COPY --from=build /app/dist ./dist
 
 EXPOSE 3000
 # Start the compiled app
-CMD ["node", "dist/main.js"]
+CMD ["node", "src/main.js"]

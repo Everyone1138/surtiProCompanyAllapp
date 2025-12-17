@@ -3,7 +3,7 @@
     "version": "0.1.0",
     "private": true,
     "scripts": {
-        "start": "ts-node -r tsconfig-paths/register src/main.ts",
+        "start": "nest start",
         "start:dev": "nest start --watch",
         "build": "nest build",
         "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -13,7 +13,7 @@
         "prisma:reset": "prisma migrate reset --force",
         "seed": "ts-node prisma/seed.ts",
         "start:prod": "node dist/main.js",
-        "postinstall": "prisma generate && npm run build"
+        "postinstall": "if [ \"$NODE_ENV\" = \"production\" ]; then echo \"skip postinstall in prod\"; else prisma generate && npm run build; fi"
     },
     "dependencies": {
         "@nestjs/common": "^10.0.0",

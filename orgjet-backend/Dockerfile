@@ -1,36 +1,38 @@
-# ---- build ----
-FROM node:20-alpine AS build
+# ---------- Builder ----------
+FROM node:20-alpine AS builder
 WORKDIR /app
+RUN apk add --no-cache libc6-compat
 
-# Install deps
+# 1) Bring in manifests + build config + prisma first
 COPY package*.json ./
-RUN npm ci
+COPY tsconfig*.json nest-cli.json ./
+COPY prisma ./prisma
 
-# Copy source and Prisma schema
-COPY . .
-# Generate Prisma client (needs schema.prisma in ./prisma/)
+# 2) Install deps WITHOUT running postinstall (prevents early 'nest build')
+#    We'll run prisma generate + build ourselves later.
+RUN npm ci --ignore-scripts
+
+# 3) Now bring in source and build
+COPY src ./src
 RUN npx prisma generate
-
-# Build Nest -> dist/
 RUN npm run build
 
-# ---- runtime ----
-FROM node:20-alpine
+# ---------- Production ----------
+FROM node:20-alpine AS runner
 WORKDIR /app
+RUN apk add --no-cache libc6-compat
 ENV NODE_ENV=production
 
-# Copy only what’s needed to run
+# Minimal runtime deps (no dev) and NO postinstall
 COPY package*.json ./
-RUN npm ci --omit=dev
+COPY prisma ./prisma
+RUN npm ci --omit=dev --ignore-scripts \
+ && npx prisma generate
 
-# Copy compiled app and Prisma artifacts
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=build /app/prisma ./prisma
-
-# If you run migrations at start (optional):
-# ENV DATABASE_URL=...
-# CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# Copy compiled app
+COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000
-CMD ["node", "dist/main.js"]
+ENV PORT=3000
+HEALTHCHECK --interval=20s --timeout=5s --retries=3 CMD wget -qO- http://127.0.0.1:3000/health || exit 1
+CMD ["node","dist/main.js"]

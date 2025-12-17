@@ -8,6 +8,7 @@ const path_1 = require("path");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule, { cors: true });
     app.useGlobalPipes(new common_1.ValidationPipe({ whitelist: true, transform: true }));
+    app.setGlobalPrefix('api');
     const port = Number(process.env.PORT || 3000);
     const origin = process.env.CORS_ORIGIN || 'http://localhost:5173';
     app.enableCors({ origin, credentials: true });

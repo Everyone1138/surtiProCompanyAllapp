@@ -1,32 +1,59 @@
-# ---------- deps (install all deps with build tools for native bcrypt) ----------
-FROM node:20-alpine AS deps
+# ---------- Stage 1: deps+build (dev deps present) ----------
+FROM node:20-alpine AS build
 WORKDIR /app
-ENV NODE_ENV=development
+
+# native toolchain for bcrypt & Prisma engines
 RUN apk add --no-cache python3 make g++ libc6-compat
+
+# don't run your postinstall here; we'll call prisma/build explicitly
+ENV SKIP_POSTINSTALL=1
+
+# deps for build
 COPY package*.json ./
 COPY prisma ./prisma
 RUN npm ci
-RUN npx prisma generate
 
-# ---------- builder (compile Nest to dist) ----------
-FROM deps AS builder
-WORKDIR /app
+# copy sources for the actual build
 COPY tsconfig*.json nest-cli.json ./
 COPY src ./src
-RUN npm run build
-# prune to production deps after building
-RUN npm prune --omit=dev
 
-# ---------- runner (small image to run the app) ----------
+# generate prisma client for the build & then compile Nest to dist/
+RUN npx prisma generate
+RUN npm run build
+
+
+# ---------- Stage 2: prod dependencies only ----------
+FROM node:20-alpine AS prod-deps
+WORKDIR /app
+
+# we DO need native toolchain here so bcrypt can build during npm ci
+RUN apk add --no-cache python3 make g++ libc6-compat
+
+# skip your postinstall here (we only want prod deps, not another build)
+ENV SKIP_POSTINSTALL=1
+
+COPY package*.json ./
+COPY prisma ./prisma
+RUN npm ci --omit=dev
+RUN npx prisma generate
+
+
+# ---------- Stage 3: runtime ----------
 FROM node:20-alpine AS runner
 WORKDIR /app
-ENV NODE_ENV=production
-ENV PORT=3000
-# copy prisma files if your app reads schema at runtime (migrations, etc.)
-COPY prisma ./prisma
-# copy compiled app and production node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-# helpful for health checks
+
+ENV NODE_ENV=production \
+    PORT=3000
+
+# bring in prod node_modules and prisma
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=prod-deps /app/prisma ./prisma
+
+# package.json (mainly for metadata)
+COPY package*.json ./
+
+# compiled app
+COPY --from=build /app/dist ./dist
+
 EXPOSE 3000
 CMD ["node", "dist/main.js"]

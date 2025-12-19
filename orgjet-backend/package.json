@@ -13,7 +13,7 @@
         "prisma:reset": "prisma migrate reset --force",
         "seed": "ts-node prisma/seed.ts",
         "start:prod": "node dist/main.js",
-        "postinstall": "node -e \"const {execSync}=require('child_process'); if(process.env.NODE_ENV==='production'){console.log('skip postinstall in prod');} else {execSync('npx prisma generate',{stdio:'inherit'}); execSync('npm run build',{stdio:'inherit'});}\""
+        "postinstall": "node -e \"const {execSync}=require('child_process'); if(process.env.SKIP_POSTINSTALL==='1' || process.env.NODE_ENV==='production'){console.log('skip postinstall'); process.exit(0)}; execSync('npx prisma generate',{stdio:'inherit'}); execSync('npm run build',{stdio:'inherit'})\""
     },
     "dependencies": {
         "@nestjs/common": "^10.0.0",

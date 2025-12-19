@@ -23,19 +23,7 @@
         },
         {
           "name": "CORS_ORIGIN",
-          "value": "https://workjetworks.com"
-        },
-        {
-          "name": "PORT",
-          "value": "3000"
-        },
-        {
-          "name": "NODE_ENV",
-          "value": "production"
-        },
-        {
-          "name": "CORS_ORIGIN",
-          "value": "https://workjetworks.com"
+          "value": "https://workjetworks.com,http://localhost:5173"
         }
       ],
       "mountPoints": [],

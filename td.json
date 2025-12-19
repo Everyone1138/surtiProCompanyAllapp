@@ -1,5 +1,5 @@
 {
-    "taskDefinitionArn": "arn:aws:ecs:us-east-1:567578056281:task-definition/orgjet-backend:4",
+    "taskDefinitionArn": "arn:aws:ecs:us-east-1:567578056281:task-definition/orgjet-backend:3",
     "containerDefinitions": [
         {
             "name": "api",
@@ -21,10 +21,6 @@
                 {
                     "name": "NODE_ENV",
                     "value": "production"
-                },
-                {
-                    "name": "CORS_ORIGIN",
-                    "value": "https://workjetworks.com"
                 }
             ],
             "mountPoints": [],
@@ -54,7 +50,7 @@
     "taskRoleArn": "arn:aws:iam::567578056281:role/orgjetTaskRole",
     "executionRoleArn": "arn:aws:iam::567578056281:role/ecsTaskExecutionRole",
     "networkMode": "awsvpc",
-    "revision": 4,
+    "revision": 3,
     "volumes": [],
     "status": "ACTIVE",
     "requiresAttributes": [
@@ -100,6 +96,6 @@
     ],
     "cpu": "256",
     "memory": "512",
-    "registeredAt": "2025-12-18T10:15:51.049000-05:00",
+    "registeredAt": "2025-12-17T16:06:47.657000-05:00",
     "registeredBy": "arn:aws:iam::567578056281:user/orgjet-local-admin"
 }

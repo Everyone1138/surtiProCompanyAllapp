@@ -4,20 +4,37 @@ import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
 import { join } from 'path';
 
+function parseOrigins(raw?: string): Set<string> {
+  return new Set(
+    (raw || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+  );
+}
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { cors: true });
+  const app = await NestFactory.create(AppModule, { cors: false });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
-  app.setGlobalPrefix('api');  
-
   const port = Number(process.env.PORT || 3000);
-  const origin = process.env.CORS_ORIGIN || 'http://localhost:5173';
-  app.enableCors({ origin, credentials: true });
 
-  // Serve local uploads
+  const allowed = parseOrigins(process.env.CORS_ORIGIN); // comma-separated list
+  app.enableCors({
+    origin(origin, cb) {
+      // allow server-to-server/no-origin (curl, health checks) and any whitelisted origin
+      if (!origin || allowed.has(origin)) return cb(null, true);
+      return cb(new Error('CORS: origin not allowed'));
+    },
+    credentials: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type,Authorization',
+    optionsSuccessStatus: 204,
+  });
+
   app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 
-  await app.listen(process.env.PORT || 3000, '0.0.0.0');
+  await app.listen(port, '0.0.0.0');
   console.log(`OrgJet API running on http://localhost:${port}`);
 }
 bootstrap();

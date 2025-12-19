@@ -1,0 +1,97 @@
+name: Deploy Backend to ECS
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'orgjet-backend/**'
+      - '.github/workflows/backend-deploy.yml'
+
+permissions:
+  id-token: write   # for OIDC
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+  ECS_SERVICE: ${{ vars.ECS_SERVICE }}
+  ECS_TASKDEF_FAMILY: ${{ vars.ECS_TASKDEF_FAMILY }}
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- Auth to AWS ---
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ secrets.AWS_ROLE_TO_ASSUME != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Fallback: static keys (ONLY if you do NOT use OIDC; then delete the OIDC step above)
+      - name: Configure AWS credentials (static keys)
+        if: ${{ secrets.AWS_ROLE_TO_ASSUME == '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & push image
+        working-directory: orgjet-backend
+        run: |
+          ECR_URI="${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}"
+          docker build -t "$ECR_URI:${IMAGE_TAG}" -t "$ECR_URI:latest" .
+          docker push "$ECR_URI:${IMAGE_TAG}"
+          docker push "$ECR_URI:latest"
+        env:
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
+
+      - name: Register new task definition revision (swap image)
+        id: td
+        run: |
+          ECR_URI="${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}"
+          # grab current task def JSON
+          aws ecs describe-task-definition \
+            --task-definition "${ECS_TASKDEF_FAMILY}" \
+            --query 'taskDefinition' > td.json
+
+          # strip readonly fields and set image
+          jq 'del(.revision,.status,.taskDefinitionArn,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
+              | .containerDefinitions[0].image = "'$ECR_URI':latest"' td.json > td_new.json
+
+          # ensure PORT and CORS_ORIGIN are present (idempotent)
+          jq '
+            .containerDefinitions[0].environment |=
+            (map(select(.name != "PORT" and .name != "CORS_ORIGIN")) + [
+              {"name":"PORT","value":"3000"},
+              {"name":"CORS_ORIGIN","value":"https://workjetworks.com"}
+            ])
+          ' td_new.json > td_final.json
+
+          # register
+          aws ecs register-task-definition --cli-input-json file://td_final.json > td_out.json
+
+          # capture new revision ARN
+          NEW_TD_ARN=$(jq -r '.taskDefinition.taskDefinitionArn' td_out.json)
+          echo "NEW_TD_ARN=$NEW_TD_ARN" >> $GITHUB_OUTPUT
+
+      - name: Update ECS service to new task def
+        run: |
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER}" \
+            --service "${ECS_SERVICE}" \
+            --task-definition "${{ steps.td.outputs.NEW_TD_ARN }}" \
+            --force-new-deployment

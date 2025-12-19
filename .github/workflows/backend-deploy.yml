@@ -56,8 +56,8 @@ jobs:
             ${{ env.IMAGE_NAME }}:main
             ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
             ${{ env.IMAGE_NAME }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        #   cache-from: type=gha
+        #   cache-to: type=gha,mode=max
 
       # AWS credentials via OIDC (preferred)
       - name: Configure AWS credentials (OIDC)

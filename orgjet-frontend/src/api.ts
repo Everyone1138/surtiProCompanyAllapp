@@ -4,7 +4,7 @@ import axios from 'axios';
 const baseURL =
   import.meta.env.PROD
     ? (import.meta.env.VITE_API_BASE || '/api')
-    : (import.meta.env.VITE_API_BASE || 'http://localhost:3000/api');
+    : (import.meta.env.VITE_API_BASE || 'https://workjetworks.com/api/auth/login');
 
 export const api = axios.create({ baseURL });
 

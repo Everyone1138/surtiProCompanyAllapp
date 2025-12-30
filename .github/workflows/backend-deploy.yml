@@ -88,12 +88,21 @@ jobs:
       - name: Promote GHCR image to ECR
         run: |
           set -euo pipefail
-          SRC="${{ env.IMAGE_NAME_BASE }}:sha-${{ github.sha }}"
-          DEST="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:latest"
+
+          if [ -z "${AWS_ACCOUNT_ID:-}" ]; then
+            echo "::error::Missing required secret AWS_ACCOUNT_ID"
+            exit 1
+          fi
+
+          SRC="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/orgjet-backend:sha-${GITHUB_SHA}"
+          DEST="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:latest"
+
           echo "Pulling $SRC"
           docker pull "$SRC"
+
           echo "Tagging as $DEST"
           docker tag "$SRC" "$DEST"
+
           echo "Pushing $DEST"
           docker push "$DEST"
 

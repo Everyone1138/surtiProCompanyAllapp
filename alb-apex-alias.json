@@ -1,17 +1,15 @@
 {
-  "Comment": "Apex -> ALB",
-  "Changes": [
-    {
-      "Action": "UPSERT",
-      "ResourceRecordSet": {
-        "Name": "workjetworks.com",
-        "Type": "A",
-        "AliasTarget": {
-          "HostedZoneId": "Z35SXDOTRQ7X7K",
-          "DNSName": "orgjet-alb-1554800839.us-east-1.elb.amazonaws.com",
-          "EvaluateTargetHealth": false
+    "Comment": "Apex -> ALB",
+    "Changes": [{
+        "Action": "UPSERT",
+        "ResourceRecordSet": {
+            "Name": "workjetworks.com",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z35SXDOTRQ7X7K",
+                "DNSName": "orgjet-alb-1554800839.us-east-1.elb.amazonaws.com",
+                "EvaluateTargetHealth": false
+            }
         }
-      }
-    }
-  ]
+    }]
 }

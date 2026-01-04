@@ -14,7 +14,7 @@ env:
   ECS_CLUSTER: orgjet                       # 🔧 your cluster
   ECS_SERVICE: orgjet-frontend-svc          # 🔧 your frontend ECS service
   ECS_TASKDEF_FAMILY: orgjet-frontend       # 🔧 task def family
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/orgjet-frontend
+  IMAGE_NAME: ghcr.io/${{ toLower(Everyone1138) }}/orgjet-frontend
 
 jobs:
   build-and-deploy:
@@ -28,6 +28,8 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}             # fallback
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}     # fallback
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}                   # required
+      OWNER_LC: ${{ toLower(Everyone1138) }}
+      IMAGE_NAME: ghcr.io/${{ toLower(Everyone1138) }}/orgjet-frontend
 
     steps:
       - name: Checkout

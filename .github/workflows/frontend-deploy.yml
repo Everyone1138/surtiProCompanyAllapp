@@ -9,12 +9,12 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: us-east-1                     # 🔧 change if needed
-  ECR_REPOSITORY: orgjet-frontend           # 🔧 your ECR repo for the frontend
-  ECS_CLUSTER: orgjet                       # 🔧 your cluster
-  ECS_SERVICE: orgjet-frontend-svc          # 🔧 your frontend ECS service
-  ECS_TASKDEF_FAMILY: orgjet-frontend       # 🔧 task def family
-  IMAGE_NAME: ghcr.io/${{ toLower(Everyone1138) }}/orgjet-frontend
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: orgjet-frontend
+  ECS_CLUSTER: orgjet
+  ECS_SERVICE: orgjet-frontend-svc
+  ECS_TASKDEF_FAMILY: orgjet-frontend
+  IMAGE_NAME: ghcr.io/${{ toLower(github.repository_owner) }}/orgjet-frontend
 
 jobs:
   build-and-deploy:
@@ -24,18 +24,16 @@ jobs:
       contents: read
       packages: write
     env:
-      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}           # optional (OIDC)
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}             # fallback
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}     # fallback
-      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}                   # required
-      OWNER_LC: ${{ toLower(Everyone1138) }}
-      IMAGE_NAME: ghcr.io/${{ toLower(Everyone1138) }}/orgjet-frontend
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node (for any pre-steps if needed)
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -47,10 +45,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Buildx
+      - name: Set up Buildx (docker-container driver for cache export)
         uses: docker/setup-buildx-action@v3
         with:
-         driver: docker-container
+          driver: docker-container
 
       - name: Build & push frontend image
         uses: docker/build-push-action@v6
@@ -65,7 +63,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # AWS auth via OIDC (preferred)
       - name: Configure AWS credentials (OIDC)
         if: ${{ env.AWS_ROLE_TO_ASSUME != '' }}
         uses: aws-actions/configure-aws-credentials@v4
@@ -73,7 +70,6 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Fallback to static keys
       - name: Configure AWS credentials (static)
         if: ${{ env.AWS_ROLE_TO_ASSUME == '' }}
         uses: aws-actions/configure-aws-credentials@v4

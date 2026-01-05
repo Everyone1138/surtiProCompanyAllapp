@@ -30,6 +30,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}               # fallback
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}       # fallback
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}                     # required for ECR
+      IMAGE_NAME_BASE: ghcr.io/${{github.repository_owner}}/orgjet-backend
 
     steps:
       - name: Checkout
@@ -62,8 +63,8 @@ jobs:
             ${{ env.IMAGE_NAME_BASE }}:main
             ${{ env.IMAGE_NAME_BASE }}:sha-${{ github.sha }}
           # If you want cache later, uncomment these (requires non-docker driver)
-          # cache-from: type=gha
-          # cache-to: type=gha,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       # --- AWS auth: choose OIDC (recommended) or fall back to static keys ---
 

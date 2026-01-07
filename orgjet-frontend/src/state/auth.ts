@@ -16,7 +16,7 @@ export const useAuth = create<State>((set) => ({
   user: null,
   token: localStorage.getItem('token'),
   async login(email, password) {
-    const { data } = await api.post('/auth/login', { email, password });
+    const { data } = await api.post('/login', { email, password });
     localStorage.setItem('token', data.token);
     set({ token: data.token, user: data.user });
     navigateTo('/');

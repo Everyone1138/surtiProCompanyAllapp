@@ -7,8 +7,8 @@ COPY . .
 
 # Allow CI (or local builds) to pass your API base at build time
 # e.g. docker build --build-arg VITE_API_BASE=https://api.example.com .
-ARG VITE_API_BASE
-ENV VITE_API_BASE=$VITE_API_BASE
+ARG VITE_API_BASE/api
+ENV VITE_API_BASE=${VITE_API_BASE}
 
 # Adjust if your build command differs
 RUN npm run build

@@ -7,7 +7,7 @@ const raw = (import.meta.env.VITE_API_BASE || '').trim();
 const baseURL =
   import.meta.env.PROD
     ? (raw && !/localhost|127\.0\.0\.1/i.test(raw) ? raw : '/api')
-    : (raw || 'http://workjetworks.com/api');
+    : (raw || 'http://localhost:3000/api');
 
 export const api = axios.create({ baseURL });
 

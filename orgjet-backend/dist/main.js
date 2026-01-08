@@ -14,6 +14,7 @@ function parseOrigins(raw) {
 }
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule, { cors: false });
+    app.setGlobalPrefix('api');
     app.useGlobalPipes(new common_1.ValidationPipe({ whitelist: true, transform: true }));
     const port = Number(process.env.PORT || 3000);
     const allowed = parseOrigins(process.env.CORS_ORIGIN);

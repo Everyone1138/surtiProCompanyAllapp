@@ -24,6 +24,6 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], HealthController.prototype, "ok", null);
 exports.HealthController = HealthController = __decorate([
-    (0, common_1.Controller)('health')
+    (0, common_1.Controller)('/health')
 ], HealthController);
 //# sourceMappingURL=health.controller.js.map

@@ -1,46 +1,48 @@
-name: Deploy Backend (OrgJet)
+name: Backend CI/CD
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
     paths:
-      - "orgjet-backend/**"
-      - ".github/workflows/backend-deploy.yml"
+      - 'orgjet-backend/**'
+      - '.github/workflows/backend-deploy.yml'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  packages: write
-  id-token: write
-
+# repo-level env (non-secret)
 env:
-  AWS_REGION: us-east-1
-  CLUSTER_NAME: orgjet
-  SERVICE_NAME: orgjet-backend-svc
-  ECR_REPO: orgjet-backend
-  GHCR_IMAGE: orgjet-backend
+  AWS_REGION: us-east-1                # 🔧 change if needed
+  ECR_REPOSITORY: orgjet-backend       # 🔧 your ECR repo name
+  ECS_CLUSTER: orgjet                  # 🔧 your ECS cluster
+  ECS_SERVICE: orgjet-backend-svc      # 🔧 your ECS service
+  ECS_TASKDEF_FAMILY: orgjet-backend   # 🔧 your task def family
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write        # for OIDC to AWS
+      contents: read
+      packages: write        # to push to GHCR
+
+    # promote secrets into env so we can test them in `if:` safely
+    env:
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}             # optional (preferred path)
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}               # fallback
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}       # fallback
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}                     # required for ECR
+      IMAGE_NAME_BASE: ghcr.io/${{github.repository_owner}}/orgjet-backend
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set lowercase owner
-        run: echo "OWNER_LC=${OWNER_LC}" >> $GITHUB_ENV
-        env:
-          OWNER_LC: ${{ toLower(github.repository_owner) }}
-
-      - name: Set image refs
+      - name: Compute lowercase owner and image base
         run: |
-          echo "GHCR_REF=ghcr.io/${OWNER_LC}/${GHCR_IMAGE}:sha-${GITHUB_SHA}" >> $GITHUB_ENV
+          echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+          echo "IMAGE_NAME_BASE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/orgjet-backend" >> "$GITHUB_ENV"
 
-      - name: Set up Docker Buildx (docker-container)
+      - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker-container
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -49,80 +51,82 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push to GHCR
+      - name: Build & push backend image to GHCR
         uses: docker/build-push-action@v6
         with:
           context: ./orgjet-backend
           file: ./orgjet-backend/Dockerfile
           push: true
-          tags: ${{ env.GHCR_REF }}
+          # must be lowercase; we used OWNER_LC above
+          tags: |
+            ${{ env.IMAGE_NAME_BASE }}:latest
+            ${{ env.IMAGE_NAME_BASE }}:main
+            ${{ env.IMAGE_NAME_BASE }}:sha-${{ github.sha }}
+          # If you want cache later, uncomment these (requires non-docker driver)
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # --- AWS auth: choose OIDC (recommended) or fall back to static keys ---
+
       - name: Configure AWS credentials (OIDC)
-        if: ${{ secrets.AWS_ROLE_TO_ASSUME != '' }}
+        if: ${{ env.AWS_ROLE_TO_ASSUME != '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Configure AWS credentials (static fallback)
-        if: ${{ secrets.AWS_ROLE_TO_ASSUME == '' }}
+      - name: Configure AWS credentials (static keys)
+        if: ${{ env.AWS_ROLE_TO_ASSUME == '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to ECR
-        run: |
-          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-          echo "ACCOUNT_ID=$ACCOUNT_ID" >> $GITHUB_ENV
-          aws ecr get-login-password --region "${AWS_REGION}" \
-            | docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Promote GHCR -> ECR (:latest)
-        run: |
-          ECR_REF="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:latest"
-          echo "ECR_REF=$ECR_REF" >> $GITHUB_ENV
-          docker pull "${GHCR_REF}"
-          docker tag "${GHCR_REF}" "${ECR_REF}"
-          docker push "${ECR_REF}"
-
-      - name: Update ECS task definition and force deploy
+      - name: Promote GHCR image to ECR
         run: |
           set -euo pipefail
 
-          TASKDEF_ARN="$(aws ecs describe-services \
-            --cluster "${CLUSTER_NAME}" \
-            --services "${SERVICE_NAME}" \
-            --query 'services[0].taskDefinition' \
-            --output text)"
+          if [ -z "${AWS_ACCOUNT_ID:-}" ]; then
+            echo "::error::Missing required secret AWS_ACCOUNT_ID"
+            exit 1
+          fi
 
-          CONTAINER_NAME="$(aws ecs describe-task-definition \
-            --task-definition "${TASKDEF_ARN}" \
-            --query 'taskDefinition.containerDefinitions[0].name' \
-            --output text)"
+          SRC="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/orgjet-backend:sha-${GITHUB_SHA}"
+          DEST="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:latest"
 
-          aws ecs describe-task-definition \
-            --task-definition "${TASKDEF_ARN}" \
-            --query 'taskDefinition' \
-            --output json \
-          | jq --arg IMG "${ECR_REF}" --arg CNAME "${CONTAINER_NAME}" '
-              del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
-              | .containerDefinitions = (.containerDefinitions | map(if .name == $CNAME then .image = $IMG else . end))
-            ' > new-taskdef.json
+          echo "Pulling $SRC"
+          docker pull "$SRC"
 
-          NEW_TASKDEF_ARN="$(aws ecs register-task-definition \
-            --cli-input-json file://new-taskdef.json \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)"
+          echo "Tagging as $DEST"
+          docker tag "$SRC" "$DEST"
+
+          echo "Pushing $DEST"
+          docker push "$DEST"
+
+      - name: Update ECS task definition image and deploy
+        run: |
+          set -euo pipefail
+          TD=$(aws ecs describe-services --cluster "${{ env.ECS_CLUSTER }}" --services "${{ env.ECS_SERVICE }}" \
+                --query 'services[0].taskDefinition' --output text)
+
+          aws ecs describe-task-definition --task-definition "$TD" --query 'taskDefinition' > td.json
+
+          jq 'del(.revision,.status,.taskDefinitionArn,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
+              | .containerDefinitions[0].image = "'${{ env.AWS_ACCOUNT_ID }}'.dkr.ecr.'${{ env.AWS_REGION }}'.amazonaws.com/'${{ env.ECR_REPOSITORY }}':latest"
+          ' td.json > td_final.json
+
+          NEW_TD=$(aws ecs register-task-definition \
+                   --cli-input-json file://td_final.json \
+                   --query 'taskDefinition.taskDefinitionArn' --output text)
 
           aws ecs update-service \
-            --cluster "${CLUSTER_NAME}" \
-            --service "${SERVICE_NAME}" \
-            --task-definition "${NEW_TASKDEF_ARN}" \
+            --cluster "${{ env.ECS_CLUSTER }}" \
+            --service "${{ env.ECS_SERVICE }}" \
+            --task-definition "$NEW_TD" \
             --force-new-deployment
 
-          echo "Deployed backend taskdef: ${NEW_TASKDEF_ARN}"
+          echo "Deployed task def: $NEW_TD"

@@ -5,7 +5,7 @@ import * as express from 'express';
 import { join } from 'path';
 
 function parseOrigins(raw?: string): Set<string> {
-  const v = (raw && raw.trim()) ? raw : 'https://workjetworks.com';
+  const v = (raw && raw.trim()) ? raw : 'https://workjetworks.com/api';
   return new Set(
     v
       .split(',')

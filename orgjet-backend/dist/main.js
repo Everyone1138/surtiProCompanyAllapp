@@ -6,7 +6,7 @@ const common_1 = require("@nestjs/common");
 const express = require("express");
 const path_1 = require("path");
 function parseOrigins(raw) {
-    const v = (raw && raw.trim()) ? raw : 'https://workjetworks.com';
+    const v = (raw && raw.trim()) ? raw : 'https://workjetworks.com/api';
     return new Set(v
         .split(',')
         .map(s => s.trim())

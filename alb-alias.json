@@ -3,7 +3,7 @@
     "Changes": [{
             "Action": "UPSERT",
             "ResourceRecordSet": {
-                "Name": "workjetworks.com",
+                "Name": "https://workjetworks.com",
                 "Type": "A",
                 "AliasTarget": {
                     "HostedZoneId": "Z35SXDOTRQ7X7K",

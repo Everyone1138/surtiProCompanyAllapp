@@ -145,3 +145,79 @@ model Subscription {
   user      User    @relation(fields: [userId], references: [id])
   userId    String
 }
+
+
+model Job {
+  id              String   @id @default(cuid())
+
+  // Who created the job (dispatcher/requester/admin)
+  createdBy       User     @relation("jobsCreated", fields: [createdById], references: [id])
+  createdById     String
+
+  // Assigned driver (nullable until assigned)
+  driver          User?    @relation("jobsDriven", fields: [driverId], references: [id])
+  driverId        String?
+
+  // Basic info
+  title           String
+  description     String?
+  company         String?
+  priority        String   @default("MEDIUM") // LOW/MEDIUM/HIGH as string
+  status          String   @default("NEW")    // NEW/ASSIGNED/EN_ROUTE_PICKUP/...
+
+  // Pickup
+  pickupName      String?
+  pickupPhone     String?
+  pickupAddress1  String
+  pickupAddress2  String?
+  pickupCity      String?
+  pickupState     String?
+  pickupPostal    String?
+  pickupNotes     String?
+
+  // Dropoff
+  dropoffName     String?
+  dropoffPhone    String?
+  dropoffAddress1 String
+  dropoffAddress2 String?
+  dropoffCity     String?
+  dropoffState    String?
+  dropoffPostal   String?
+  dropoffNotes    String?
+
+  // Optional scheduling
+  pickupWindowStart  DateTime?
+  pickupWindowEnd    DateTime?
+  dropoffWindowStart DateTime?
+  dropoffWindowEnd   DateTime?
+
+  // Audit fields
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  events          JobEvent[]
+
+  @@index([status])
+  @@index([driverId])
+  @@index([createdById])
+  @@index([company])
+  @@index([title])
+}
+
+model JobEvent {
+  id          String   @id @default(cuid())
+  job         Job      @relation(fields: [jobId], references: [id])
+  jobId       String
+
+  actor       User     @relation(fields: [actorId], references: [id])
+  actorId     String
+
+  eventType   String   // CREATED, ASSIGNED, STATUS_CHANGED, UPDATED, NOTE_ADDED, etc
+  payloadJson String   @default("{}")
+
+  createdAt   DateTime @default(now())
+
+  @@index([jobId])
+  @@index([actorId])
+}

@@ -26,6 +26,8 @@ model User {
   subscriptions       Subscription[]
   attachmentsUploaded Attachment[]      @relation("attachmentsUploaded")
   assignments         RequestAssignee[] // <— many-to-many via join table
+  jobsCreated Job[] @relation("jobsCreated")
+  jobsDriven  Job[] @relation("jobsDriven")
 }
 
 model Team {

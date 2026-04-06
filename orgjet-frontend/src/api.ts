@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const raw = (import.meta.env.VITE_API_BASE || '').trim();
+const raw = (import.meta.env.VITE_API_BASE || '').trim(); 
 
 // In production, always route through the ALB rule using /api
 const baseURL = import.meta.env.PROD

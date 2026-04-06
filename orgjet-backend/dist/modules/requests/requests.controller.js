@@ -22,18 +22,9 @@ const multer_1 = require("multer");
 const path_1 = require("path");
 const fs_1 = require("fs");
 const fs_2 = require("fs");
+const request_statuses_1 = require("./request-statuses");
 const path = require("path");
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
-const STATUSES = [
-    'NEW',
-    'TRIAGE',
-    'ASSIGNED',
-    'IN_PROGRESS',
-    'BLOCKED',
-    'REVIEW',
-    'DONE',
-    'CANCELLED',
-];
 function ensureUploadsFolder() {
     if (!(0, fs_1.existsSync)('uploads'))
         (0, fs_1.mkdirSync)('uploads', { recursive: true });
@@ -80,7 +71,7 @@ class UpdateRequestDto {
 }
 __decorate([
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsIn)(STATUSES),
+    (0, class_validator_1.IsIn)(request_statuses_1.REQUEST_STATUSES),
     __metadata("design:type", String)
 ], UpdateRequestDto.prototype, "status", void 0);
 __decorate([
@@ -149,6 +140,24 @@ let RequestsController = class RequestsController {
         });
         return { items };
     }
+    async getMyJobs(req) {
+        const userId = req.user.userId || req.user.id;
+        return this.prisma.request.findMany({
+            where: {
+                assignments: {
+                    some: { userId }
+                }
+            },
+            orderBy: { createdAt: 'desc' },
+            include: {
+                assignments: {
+                    include: {
+                        user: { select: { id: true, name: true } }
+                    }
+                }
+            }
+        });
+    }
     async create(req, dto) {
         var _a, _b, _c, _d;
         const created = await this.prisma.request.create({
@@ -191,6 +200,9 @@ let RequestsController = class RequestsController {
         });
     }
     async update(req, id, dto) {
+        if (dto.status && !(0, request_statuses_1.isValidRequestStatus)(dto.status)) {
+            throw new common_1.ForbiddenException('Invalid status');
+        }
         const updated = await this.prisma.request.update({
             where: { id },
             data: {
@@ -206,6 +218,42 @@ let RequestsController = class RequestsController {
                 eventType: 'updated',
                 payloadJson: JSON.stringify(dto),
             },
+        });
+        return updated;
+    }
+    async driverUpdateStatus(req, id, body) {
+        const userId = req.user.userId || req.user.id;
+        if (!(0, request_statuses_1.isValidRequestStatus)(body.status)) {
+            throw new common_1.ForbiddenException('Invalid status');
+        }
+        const request = await this.prisma.request.findUnique({
+            where: { id },
+            include: {
+                assignments: true
+            }
+        });
+        if (!request)
+            throw new common_1.NotFoundException('Request not found');
+        const isAssigned = request.assignments.some(a => a.userId === userId);
+        if (!isAssigned) {
+            throw new common_1.ForbiddenException('You are not assigned to this job');
+        }
+        const updated = await this.prisma.request.update({
+            where: { id },
+            data: {
+                currentStatus: body.status
+            }
+        });
+        await this.prisma.requestEvent.create({
+            data: {
+                requestId: id,
+                actorId: userId,
+                eventType: 'status_changed',
+                payloadJson: JSON.stringify({
+                    from: request.currentStatus,
+                    to: body.status
+                })
+            }
         });
         return updated;
     }
@@ -328,7 +376,12 @@ let RequestsController = class RequestsController {
         const current = await this.prisma.request.findUnique({
             where: { id }, select: { currentStatus: true }
         });
-        if (current && ['NEW', 'TRIAGE'].includes(current.currentStatus)) {
+        if (current && ['NEW'].includes(current.currentStatus)) {
+            await this.prisma.request.update({
+                where: { id }, data: { currentStatus: 'ASSIGNED' }
+            });
+        }
+        {
             await this.prisma.request.update({
                 where: { id }, data: { currentStatus: 'ASSIGNED' }
             });
@@ -441,6 +494,13 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "list", null);
 __decorate([
+    (0, common_1.Get)('driver/my-jobs'),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], RequestsController.prototype, "getMyJobs", null);
+__decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
@@ -464,6 +524,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, UpdateRequestDto]),
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "update", null);
+__decorate([
+    (0, common_1.Post)('driver/:id/status'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:returntype", Promise)
+], RequestsController.prototype, "driverUpdateStatus", null);
 __decorate([
     (0, common_1.Post)(':id/comment'),
     __param(0, (0, common_1.Req)()),

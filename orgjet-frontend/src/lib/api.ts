@@ -13,9 +13,9 @@ export const api = axios.create({
   withCredentials: true,
 });
 
-export const listUsers = (q?: string) =>
-  api.get('/users', { params: q ? { q } : {} })
-     .then(r => r.data.items || r.data || []);
+export const listUsers = (team?: string) =>
+  api.get('/users', { params: team ? { team } : {} })
+     .then(r => r.data);
 
 export const addAssignees = (requestId: string, userIds: string[]) =>
   api.post(`/requests/${requestId}/assignees`, { userIds }).then(r => r.data);

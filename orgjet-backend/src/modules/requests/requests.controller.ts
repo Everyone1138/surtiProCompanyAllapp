@@ -19,22 +19,14 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { unlinkSync } from 'fs';
+import { isValidRequestStatus, REQUEST_STATUSES } from './request-statuses';
 import * as path from 'path';
 
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
 type Priority = (typeof PRIORITIES)[number];
+type Status = (typeof REQUEST_STATUSES)[number];
 
-const STATUSES = [
-  'NEW',
-  'TRIAGE',
-  'ASSIGNED',
-  'IN_PROGRESS',
-  'BLOCKED',
-  'REVIEW',
-  'DONE',
-  'CANCELLED',
-] as const;
-type Status = (typeof STATUSES)[number];
+
 
 function ensureUploadsFolder() {
   if (!existsSync('uploads')) mkdirSync('uploads', { recursive: true });
@@ -53,7 +45,7 @@ class CreateRequestDto {
 }
 
 class UpdateRequestDto {
-  @IsOptional() @IsIn(STATUSES as readonly string[]) status?: Status;
+  @IsOptional() @IsIn(REQUEST_STATUSES as readonly string[]) status?: Status;
   @IsOptional() @IsIn(PRIORITIES as readonly string[]) priority?: Priority;
   @IsOptional() @IsDateString() dueAt?: string;
 }
@@ -129,6 +121,28 @@ export class RequestsController {
     return { items };
   }
 
+// request controller 
+  @Get('driver/my-jobs')
+async getMyJobs(@Req() req: any) {
+  const userId = req.user.userId || req.user.id;
+
+  return this.prisma.request.findMany({
+    where: {
+      assignments: {
+        some: { userId }
+      }
+    },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      assignments: {
+        include: {
+          user: { select: { id: true, name: true } }
+        }
+      }
+    }
+  });
+}
+
   // CREATE with dueAt + company/companyId
   @Post()
   async create(@Req() req: any, @Body() dto: CreateRequestDto) {
@@ -163,6 +177,9 @@ export class RequestsController {
     return created;
   }
 
+
+
+
   // GET by id with events + assignments
   @Get(':id')
   async get(@Param('id') id: string) {
@@ -178,20 +195,24 @@ export class RequestsController {
   }
 
   // PATCH (status, priority, dueAt)
-  @Patch(':id')
-  async update(
-    @Req() req: any,
-    @Param('id') id: string,
-    @Body() dto: UpdateRequestDto,
-  ) {
-    const updated = await this.prisma.request.update({
-      where: { id },
-      data: {
-        currentStatus: dto.status as any,
-        priority: dto.priority as any,
-        dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,
-      },
-    });
+@Patch(':id')
+async update(
+  @Req() req: any,
+  @Param('id') id: string,
+  @Body() dto: UpdateRequestDto,
+) {
+  if (dto.status && !isValidRequestStatus(dto.status)) {
+    throw new ForbiddenException('Invalid status');
+  }
+
+  const updated = await this.prisma.request.update({
+    where: { id },
+    data: {
+      currentStatus: dto.status as any,
+      priority: dto.priority as any,
+      dueAt: dto.dueAt ? new Date(dto.dueAt) : undefined,
+    },
+  });
 
     await this.prisma.requestEvent.create({
       data: {
@@ -204,6 +225,56 @@ export class RequestsController {
 
     return updated;
   }
+
+@Post('driver/:id/status')
+async driverUpdateStatus(
+  @Req() req: any,
+  @Param('id') id: string,
+  @Body() body: { status: string }
+) {
+  const userId = req.user.userId || req.user.id;
+
+  if (!isValidRequestStatus(body.status)) {
+    throw new ForbiddenException('Invalid status');
+  }
+
+  const request = await this.prisma.request.findUnique({
+    where: { id },
+    include: {
+      assignments: true
+    }
+  });
+
+  if (!request) throw new NotFoundException('Request not found');
+
+  const isAssigned = request.assignments.some(a => a.userId === userId);
+  if (!isAssigned) {
+    throw new ForbiddenException('You are not assigned to this job');
+  }
+
+  const updated = await this.prisma.request.update({
+    where: { id },
+    data: {
+      currentStatus: body.status as any
+    }
+  });
+
+  await this.prisma.requestEvent.create({
+    data: {
+      requestId: id,
+      actorId: userId,
+      eventType: 'status_changed',
+      payloadJson: JSON.stringify({
+        from: request.currentStatus,
+        to: body.status
+      })
+    }
+  });
+
+  return updated;
+}
+
+
 
   // COMMENT event
   @Post(':id/comment')
@@ -315,6 +386,7 @@ async remove(@Req() req: any, @Param('id') id: string) {
           where: { id }, data: { currentStatus: 'ASSIGNED' as any }
         });
       }
+      
 
       await this.prisma.requestEvent.create({
         data: {
@@ -365,7 +437,11 @@ async remove(@Req() req: any, @Param('id') id: string) {
     const current = await this.prisma.request.findUnique({
       where: { id }, select: { currentStatus: true }
     });
-    if (current && ['NEW', 'TRIAGE'].includes(current.currentStatus)) {
+    if (current && ['NEW'].includes(current.currentStatus)) {
+  await this.prisma.request.update({
+    where: { id }, data: { currentStatus: 'ASSIGNED' as any }
+  });
+} {
       await this.prisma.request.update({
         where: { id }, data: { currentStatus: 'ASSIGNED' as any }
       });

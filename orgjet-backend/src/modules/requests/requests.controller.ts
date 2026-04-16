@@ -20,6 +20,7 @@ import { extname } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { unlinkSync } from 'fs';
 import { isValidRequestStatus, REQUEST_STATUSES } from './request-statuses';
+import { BadRequestException } from '@nestjs/common';
 import * as path from 'path';
 
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
@@ -122,26 +123,26 @@ export class RequestsController {
   }
 
 // request controller 
-  @Get('driver/my-jobs')
-async getMyJobs(@Req() req: any) {
-  const userId = req.user.userId || req.user.id;
+//   @Get('driver/my-jobs')
+// async getMyJobs(@Req() req: any) {
+//   const userId = req.user.userId || req.user.id;
 
-  return this.prisma.request.findMany({
-    where: {
-      assignments: {
-        some: { userId }
-      }
-    },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      assignments: {
-        include: {
-          user: { select: { id: true, name: true } }
-        }
-      }
-    }
-  });
-}
+//   return this.prisma.request.findMany({
+//     where: {
+//       assignments: {
+//         some: { userId }
+//       }
+//     },
+//     orderBy: { createdAt: 'desc' },
+//     include: {
+//       assignments: {
+//         include: {
+//           user: { select: { id: true, name: true } }
+//         }
+//       }
+//     }
+//   });
+// }
 
   // CREATE with dueAt + company/companyId
   @Post()
@@ -226,37 +227,42 @@ async update(
     return updated;
   }
 
+
+  
+
 @Post('driver/:id/status')
 async driverUpdateStatus(
   @Req() req: any,
   @Param('id') id: string,
-  @Body() body: { status: string }
+  @Body() body: { status: string },
 ) {
   const userId = req.user.userId || req.user.id;
 
-  if (!isValidRequestStatus(body.status)) {
-    throw new ForbiddenException('Invalid status');
+  if (!body?.status || !isValidRequestStatus(body.status)) {
+    throw new BadRequestException('Invalid status');
   }
 
   const request = await this.prisma.request.findUnique({
     where: { id },
     include: {
-      assignments: true
-    }
+      assignments: true,
+    },
   });
 
-  if (!request) throw new NotFoundException('Request not found');
+  if (!request) {
+    throw new NotFoundException('Request not found');
+  }
 
-  const isAssigned = request.assignments.some(a => a.userId === userId);
+  const isAssigned = request.assignments.some((a) => a.userId === userId);
   if (!isAssigned) {
-    throw new ForbiddenException('You are not assigned to this job');
+    throw new ForbiddenException('You are not assigned to this request');
   }
 
   const updated = await this.prisma.request.update({
     where: { id },
     data: {
-      currentStatus: body.status as any
-    }
+      currentStatus: body.status as any,
+    },
   });
 
   await this.prisma.requestEvent.create({
@@ -266,13 +272,17 @@ async driverUpdateStatus(
       eventType: 'status_changed',
       payloadJson: JSON.stringify({
         from: request.currentStatus,
-        to: body.status
-      })
-    }
+        to: body.status,
+      }),
+    },
   });
 
   return updated;
 }
+
+
+
+
 
 
 
@@ -408,6 +418,36 @@ async remove(@Req() req: any, @Param('id') id: string) {
       },
     });
   }
+
+
+@Get('driver/my-jobs')
+async getMyJobs(@Req() req: any) {
+  const userId = req.user.userId || req.user.id;
+
+  const items = await this.prisma.request.findMany({
+    where: {
+      assignments: {
+        some: { userId },
+      },
+    },
+    include: {
+      type: true,
+      team: true,
+      assignments: {
+        include: {
+          user: { select: { id: true, name: true } },
+        },
+      },
+    },
+    orderBy: { updatedAt: 'desc' },
+  });
+
+  return { items };
+}
+
+
+
+
 
   // ADD multiple assignees (SQLite-safe dedupe)
   @Post(':id/assignees')

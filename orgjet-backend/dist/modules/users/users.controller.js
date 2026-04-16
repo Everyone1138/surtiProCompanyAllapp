@@ -21,22 +21,34 @@ let UsersController = class UsersController {
         this.prisma = prisma;
     }
     async me(req) {
-        const user = await this.prisma.user.findUnique({ where: { id: req.user.userId }, include: { team: true } });
+        const user = await this.prisma.user.findUnique({
+            where: { id: req.user.userId },
+            include: { team: true },
+        });
         if (!user)
             return null;
         const { password, ...safe } = user;
         return safe;
     }
-    async listUsers(team) {
+    async listUsers(req, team) {
         const where = {};
         if (team)
             where.team = { name: team };
         const users = await this.prisma.user.findMany({
             where,
-            select: { id: true, name: true, email: true, role: true, team: { select: { name: true } } },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                team: { select: { name: true } },
+            },
             orderBy: [{ role: 'asc' }, { name: 'asc' }],
         });
-        return { users };
+        return {
+            users,
+            meId: req.user.userId,
+        };
     }
 };
 exports.UsersController = UsersController;
@@ -49,9 +61,10 @@ __decorate([
 ], UsersController.prototype, "me", null);
 __decorate([
     (0, common_1.Get)('users'),
-    __param(0, (0, common_1.Query)('team')),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('team')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "listUsers", null);
 exports.UsersController = UsersController = __decorate([

@@ -9,6 +9,7 @@ import { Outlet } from 'react-router-dom';
 
 
 export default function RequestDetail() {
+
   const { id } = useParams();
   const [data, setData] = useState<any | null>(null);
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ export default function RequestDetail() {
   // users & assignment UI
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]); // for legacy single-assign dropdown
+  const [meId, setMeId] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [selected, setSelected] = useState<string[]>([]); // multi-select
 
@@ -89,13 +91,15 @@ useEffect(() => {
 useEffect(() => {
   listUsers()
     .then((res) => {
-      const arr = Array.isArray(res) ? res : (res?.items ?? []);
+      const arr = Array.isArray(res) ? res : (res?.users ?? []);
       setAllUsers(arr || []);
-      setUsers(arr || []); // if you use users for the legacy dropdown
+      setUsers(arr || []);
+      setMeId(res?.meId ?? '');
     })
     .catch(() => {
       setAllUsers([]);
       setUsers([]);
+      setMeId('');
     });
 }, []);
 
@@ -220,6 +224,17 @@ if (!data) {
     .map((a: any) => a.user?.name)
     .filter(Boolean)
     .join(', ');
+
+
+    const orderedUsers = [
+  ...users.filter((u: any) => u.id === meId),
+  ...users.filter((u: any) => u.id !== meId),
+];
+
+const orderedAllUsers = [
+  ...allUsers.filter((u: any) => u.id === meId),
+  ...allUsers.filter((u: any) => u.id !== meId),
+];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -458,9 +473,9 @@ if (!data) {
     setSelected(vals);
   }}
 >
-  {(Array.isArray(allUsers) ? allUsers : []).map((u: any) => (
+  {orderedAllUsers.map((u: any) => (
     <option key={u.id} value={u.id}>
-      {u.name}
+      {u.id === meId ? `${u.name} (Me)` : u.name}
     </option>
   ))}
 </select>
@@ -490,20 +505,20 @@ if (!data) {
     Only admins/coordinators or the request creator can delete.
   </div>
 </div>
-          <label className="block text-sm text-gray-600 mb-1">Assign to</label>
-          <select
-            className="border rounded w-full p-2"
-            value={data.assignee?.id ?? ''}
-            onChange={(e) => assignTo(e.target.value)}
-            disabled={assigning}
-          >
-            <option value="">— Unassigned —</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
+<label className="block text-sm text-gray-600 mb-1">Assign to</label>
+<select
+  className="border rounded w-full p-2"
+  value={data.assignee?.id ?? ''}
+  onChange={(e) => assignTo(e.target.value)}
+  disabled={assigning}
+>
+  <option value="">— Unassigned —</option>
+  {orderedUsers.map((u: any) => (
+    <option key={u.id} value={u.id}>
+      {u.id === meId ? `${u.name} (Me)` : u.name}
+    </option>
+  ))}
+</select>
 
           {assigning && <div className="text-xs text-gray-500 mt-2">Assigning…</div>}
         </div>

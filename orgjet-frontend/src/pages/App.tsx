@@ -11,7 +11,10 @@ export default function App() {
   if (!user) return null
 
   const tab = (to: string, label: string) => (
-    <Link to={to} className={`px-3 py-2 rounded ${loc.pathname===to ? 'bg-black text-white' : 'bg-white text-black border'}`}>
+    <Link
+      to={to}
+      className={`px-3 py-2 rounded ${loc.pathname===to ? 'bg-black text-white' : 'bg-white text-black border'}`}
+    >
       {label}
     </Link>
   )
@@ -25,9 +28,12 @@ export default function App() {
             {tab('/', 'My Work')}
             {tab('/board', 'Dispatch Board')}
             {tab('/new', 'Submit Request')}
+            {tab('/driver', 'Driver Jobs')}
           </nav>
           <div className="ml-auto text-sm flex items-center gap-3">
-            <span className="text-gray-600">{user.name} • {user.role}{user.team ? ` • ${user.team.name}` : ''}</span>
+            <span className="text-gray-600">
+              {user.name} • {user.role}{user.team ? ` • ${user.team.name}` : ''}
+            </span>
             <button onClick={logout} className="text-red-600 underline">Logout</button>
           </div>
         </div>

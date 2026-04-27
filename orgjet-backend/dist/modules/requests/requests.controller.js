@@ -23,6 +23,7 @@ const path_1 = require("path");
 const fs_1 = require("fs");
 const fs_2 = require("fs");
 const request_statuses_1 = require("./request-statuses");
+const common_2 = require("@nestjs/common");
 const path = require("path");
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 function ensureUploadsFolder() {
@@ -140,24 +141,6 @@ let RequestsController = class RequestsController {
         });
         return { items };
     }
-    async getMyJobs(req) {
-        const userId = req.user.userId || req.user.id;
-        return this.prisma.request.findMany({
-            where: {
-                assignments: {
-                    some: { userId }
-                }
-            },
-            orderBy: { createdAt: 'desc' },
-            include: {
-                assignments: {
-                    include: {
-                        user: { select: { id: true, name: true } }
-                    }
-                }
-            }
-        });
-    }
     async create(req, dto) {
         var _a, _b, _c, _d;
         const created = await this.prisma.request.create({
@@ -223,26 +206,27 @@ let RequestsController = class RequestsController {
     }
     async driverUpdateStatus(req, id, body) {
         const userId = req.user.userId || req.user.id;
-        if (!(0, request_statuses_1.isValidRequestStatus)(body.status)) {
-            throw new common_1.ForbiddenException('Invalid status');
+        if (!(body === null || body === void 0 ? void 0 : body.status) || !(0, request_statuses_1.isValidRequestStatus)(body.status)) {
+            throw new common_2.BadRequestException('Invalid status');
         }
         const request = await this.prisma.request.findUnique({
             where: { id },
             include: {
-                assignments: true
-            }
+                assignments: true,
+            },
         });
-        if (!request)
+        if (!request) {
             throw new common_1.NotFoundException('Request not found');
-        const isAssigned = request.assignments.some(a => a.userId === userId);
+        }
+        const isAssigned = request.assignments.some((a) => a.userId === userId);
         if (!isAssigned) {
-            throw new common_1.ForbiddenException('You are not assigned to this job');
+            throw new common_1.ForbiddenException('You are not assigned to this request');
         }
         const updated = await this.prisma.request.update({
             where: { id },
             data: {
-                currentStatus: body.status
-            }
+                currentStatus: body.status,
+            },
         });
         await this.prisma.requestEvent.create({
             data: {
@@ -251,9 +235,9 @@ let RequestsController = class RequestsController {
                 eventType: 'status_changed',
                 payloadJson: JSON.stringify({
                     from: request.currentStatus,
-                    to: body.status
-                })
-            }
+                    to: body.status,
+                }),
+            },
         });
         return updated;
     }
@@ -357,6 +341,27 @@ let RequestsController = class RequestsController {
                 assignments: { include: { user: { select: { id: true, name: true } } } },
             },
         });
+    }
+    async getMyJobs(req) {
+        const userId = req.user.userId || req.user.id;
+        const items = await this.prisma.request.findMany({
+            where: {
+                assignments: {
+                    some: { userId },
+                },
+            },
+            include: {
+                type: true,
+                team: true,
+                assignments: {
+                    include: {
+                        user: { select: { id: true, name: true } },
+                    },
+                },
+            },
+            orderBy: { updatedAt: 'desc' },
+        });
+        return { items };
     }
     async addAssignees(req, id, body) {
         const userIds = Array.isArray(body === null || body === void 0 ? void 0 : body.userIds) ? body.userIds.filter(Boolean) : [];
@@ -494,13 +499,6 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "list", null);
 __decorate([
-    (0, common_1.Get)('driver/my-jobs'),
-    __param(0, (0, common_1.Req)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], RequestsController.prototype, "getMyJobs", null);
-__decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
@@ -559,6 +557,13 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, Object]),
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "assign", null);
+__decorate([
+    (0, common_1.Get)('driver/my-jobs'),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], RequestsController.prototype, "getMyJobs", null);
 __decorate([
     (0, common_1.Post)(':id/assignees'),
     __param(0, (0, common_1.Req)()),

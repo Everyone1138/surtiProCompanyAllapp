@@ -1,6 +1,17 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PrismaService } from '../../prisma.service';
+
+const BOARD_STATUSES = [
+  'NEW',
+  'ASSIGNED',
+  'EN_ROUTE_PICKUP',
+  'PICKED_UP',
+  'EN_ROUTE_DROPOFF',
+  'DELIVERED',
+  'CANCELLED',
+  'ISSUE',
+] as const;
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('board')
@@ -8,19 +19,38 @@ export class BoardController {
   constructor(private prisma: PrismaService) {}
 
   @Get()
-  async board(@Query('team') team?: string) {
-    const where = team ? { team: { name: team } } : {};
+  async board() {
     const items = await this.prisma.request.findMany({
-      where,
-      select: {
-        id: true, title: true, currentStatus: true, priority: true, updatedAt: true,
-        assignee: { select: { id: true, name: true } }, type: { select: { name: true } }
+      include: {
+        type: true,
+        team: true,
+        assignee: { select: { id: true, name: true } },
+        assignments: {
+          include: {
+            user: { select: { id: true, name: true } },
+          },
+        },
       },
-      orderBy: { updatedAt: 'desc' }
+      orderBy: { updatedAt: 'desc' },
     });
-    const lanes = ['NEW','TRIAGE','ASSIGNED','IN_PROGRESS','BLOCKED','REVIEW','DONE','CANCELLED'];
-    const grouped: Record<string, any[]> = Object.fromEntries(lanes.map(l => [l, [] as any[]]));
-    items.forEach((i: any) => { (grouped[i.currentStatus] as any[]).push(i); });
-    return grouped;
+
+    const columns: Record<string, any[]> = {};
+    for (const status of BOARD_STATUSES) {
+      columns[status] = [];
+    }
+
+    for (const item of items) {
+      const status = item.currentStatus || 'NEW';
+      if (!columns[status]) columns[status] = [];
+      columns[status].push(item);
+    }
+
+    return {
+      columns: BOARD_STATUSES.map((status) => ({
+        key: status,
+        title: status.replace('_', ' '),
+        items: columns[status] ?? [],
+      })),
+    };
   }
 }

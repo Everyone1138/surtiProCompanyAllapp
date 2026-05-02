@@ -16,6 +16,8 @@ const prisma_service_1 = require("../../prisma.service");
 const BOARD_STATUSES = [
     'NEW',
     'ASSIGNED',
+    'DISASSEMBLE',
+    'PURCHASES',
     'EN_ROUTE_PICKUP',
     'PICKED_UP',
     'EN_ROUTE_DROPOFF',
@@ -41,25 +43,23 @@ let BoardController = class BoardController {
             },
             orderBy: { updatedAt: 'desc' },
         });
-        const columns = {};
-        for (const status of BOARD_STATUSES) {
-            columns[status] = [];
-        }
-        for (const item of items) {
-            const status = item.currentStatus || 'NEW';
-            if (!columns[status])
-                columns[status] = [];
-            columns[status].push(item);
-        }
+        const grouped = {};
+        BOARD_STATUSES.forEach((status) => {
+            grouped[status] = [];
+        });
+        items.forEach((r) => {
+            const status = r.currentStatus || 'NEW';
+            if (!grouped[status]) {
+                grouped[status] = [];
+            }
+            grouped[status].push(r);
+        });
         return {
-            columns: BOARD_STATUSES.map((status) => {
-                var _a;
-                return ({
-                    key: status,
-                    title: status.replace('_', ' '),
-                    items: (_a = columns[status]) !== null && _a !== void 0 ? _a : [],
-                });
-            }),
+            columns: BOARD_STATUSES.map((status) => ({
+                key: status,
+                title: status.replace('_', ' '),
+                items: grouped[status] || [],
+            })),
         };
     }
 };

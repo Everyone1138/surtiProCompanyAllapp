@@ -5,6 +5,8 @@ import { PrismaService } from '../../prisma.service';
 const BOARD_STATUSES = [
   'NEW',
   'ASSIGNED',
+  'DISASSEMBLE',
+  'PURCHASES',
   'EN_ROUTE_PICKUP',
   'PICKED_UP',
   'EN_ROUTE_DROPOFF',
@@ -34,22 +36,27 @@ export class BoardController {
       orderBy: { updatedAt: 'desc' },
     });
 
-    const columns: Record<string, any[]> = {};
-    for (const status of BOARD_STATUSES) {
-      columns[status] = [];
-    }
+    const grouped: Record<string, any[]> = {};
 
-    for (const item of items) {
-      const status = item.currentStatus || 'NEW';
-      if (!columns[status]) columns[status] = [];
-      columns[status].push(item);
-    }
+    BOARD_STATUSES.forEach((status) => {
+      grouped[status] = [];
+    });
+
+    items.forEach((r) => {
+      const status = r.currentStatus || 'NEW';
+
+      if (!grouped[status]) {
+        grouped[status] = [];
+      }
+
+      grouped[status].push(r);
+    });
 
     return {
       columns: BOARD_STATUSES.map((status) => ({
         key: status,
         title: status.replace('_', ' '),
-        items: columns[status] ?? [],
+        items: grouped[status] || [],
       })),
     };
   }

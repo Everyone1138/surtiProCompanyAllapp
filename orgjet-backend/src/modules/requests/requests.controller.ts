@@ -33,6 +33,48 @@ function ensureUploadsFolder() {
   if (!existsSync('uploads')) mkdirSync('uploads', { recursive: true });
 }
 
+
+const DOCUMENT_KINDS = ['cotizacion', 'orden-compra', 'remision'] as const;
+type DocumentKind = (typeof DOCUMENT_KINDS)[number];
+
+const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
+  cotizacion: 'Cotizacion',
+  'orden-compra': 'Orden de compra',
+  remision: 'Remision',
+};
+
+const ALLOWED_DOCUMENT_MIMES = new Set([
+  // PDF
+  'application/pdf',
+
+  // Images
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+
+  // Word
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+
+  // Excel
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+
+  // PowerPoint
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+
+  // Text / CSV
+  'text/plain',
+  'text/csv',
+
+  // Zip
+  'application/zip',
+  'application/x-zip-compressed',
+]);
+
+
 class CreateRequestDto {
   @IsString() title!: string;
   @IsString() description!: string;
@@ -60,67 +102,143 @@ class CommentDto {
 export class RequestsController {
   constructor(private prisma: PrismaService) {}
 
-  // LIST with filters + robust mine=1 (supports join-table and legacy assigneeId)
-  @Get()
-  async list(
-    @Req() req: any,
-    @Query('status') status?: string, // CSV supported
-    @Query('team') team?: string,
-    @Query('type') type?: string,
-    @Query('search') search?: string,
-    @Query('mine') mine?: string,
-  ) {
-    const where: any = {};
+// LIST / SEARCH with filters
+@Get()
+async list(
+  @Req() req: any,
+  @Query('status') status?: string,       // CSV supported: NEW,ASSIGNED
+  @Query('team') team?: string,
+  @Query('type') type?: string,
+  @Query('search') search?: string,       // existing frontend compatibility
+  @Query('q') q?: string,                 // job-search page compatibility
+  @Query('mine') mine?: string,
+  @Query('assigneeId') assigneeId?: string,
+  @Query('page') pageRaw?: string,
+  @Query('pageSize') pageSizeRaw?: string,
+) {
+  const page = Math.max(1, Number(pageRaw || '1'));
+  const pageSize = Math.min(100, Math.max(1, Number(pageSizeRaw || '25')));
+  const skip = (page - 1) * pageSize;
 
-    if (status) {
-      const statuses = status.split(',').map((s) => s.trim()).filter(Boolean);
-      where.currentStatus = statuses.length > 1 ? { in: statuses } : statuses[0];
+  const andFilters: any[] = [];
+
+  if (status) {
+    const statuses = status
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (statuses.length > 0) {
+      andFilters.push({
+        currentStatus: statuses.length > 1 ? { in: statuses } : statuses[0],
+      });
     }
+  }
 
-    if (team) where.team = { name: team };
-    if (type) where.type = { name: type };
-    if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-      ];
-    }
+  if (team) {
+    andFilters.push({
+      team: { is: { name: team } },
+    });
+  }
 
-    // Robust "mine" filter: accept userId or id; match join-table OR legacy assigneeId
-    const uid = req?.user?.userId || req?.user?.id;
-    if (mine === '1' && uid) {
-      const mineOr = [
-        { assignments: { some: { userId: uid } } }, // new M:N
-        { assigneeId: uid },                        // legacy single-assignee
-      ];
-      if (where.OR) {
-        // If search already added OR, merge into that OR
-        where.OR = [...where.OR, ...mineOr];
-      } else {
-        // Defer combining with AND of other filters just before query
-        (where as any).__mineOr = mineOr;
-      }
-    }
+  if (type) {
+    andFilters.push({
+      type: { is: { name: type } },
+    });
+  }
 
-    // Normalize where if we used the __mineOr trick
-    let finalWhere: any = where;
-    if ((where as any).__mineOr) {
-      const { __mineOr, ...rest } = where as any;
-      finalWhere = { AND: [rest, { OR: __mineOr }] };
-    }
+  const term = (q || search || '').trim();
 
-    const items = await this.prisma.request.findMany({
-      where: finalWhere,
+  if (term) {
+    andFilters.push({
+      OR: [
+        { title: { contains: term } },
+        { description: { contains: term } },
+        { company: { contains: term } },
+        { companyId: { contains: term } },
+        { currentStatus: { contains: term } },
+        { priority: { contains: term } },
+        { metadataJson: { contains: term } },
+
+        // legacy single-assignee relation
+        { assignee: { is: { name: { contains: term } } } },
+        { assignee: { is: { email: { contains: term } } } },
+
+        // multi-assignee join table relation
+        {
+          assignments: {
+            some: {
+              user: {
+                OR: [
+                  { name: { contains: term } },
+                  { email: { contains: term } },
+                ],
+              },
+            },
+          },
+        },
+
+        // request type
+        { type: { is: { name: { contains: term } } } },
+
+        // team
+        { team: { is: { name: { contains: term } } } },
+      ],
+    });
+  }
+
+  if (assigneeId) {
+    andFilters.push({
+      OR: [
+        { assigneeId },
+        { assignments: { some: { userId: assigneeId } } },
+      ],
+    });
+  }
+
+  // Robust "mine" filter: current user via join-table OR legacy assigneeId
+  const uid = req?.user?.userId || req?.user?.id;
+
+  if (mine === '1' && uid) {
+    andFilters.push({
+      OR: [
+        { assignments: { some: { userId: uid } } },
+        { assigneeId: uid },
+        { createdById: uid },
+      ],
+    });
+  }
+
+  const where = andFilters.length > 0 ? { AND: andFilters } : {};
+
+  const [items, total] = await Promise.all([
+    this.prisma.request.findMany({
+      where,
       include: {
         type: true,
         team: true,
-        assignments: { include: { user: { select: { id: true, name: true } } } },
+        assignee: { select: { id: true, name: true, email: true } },
+        assignments: {
+          include: {
+            user: { select: { id: true, name: true, email: true, role: true } },
+          },
+        },
       },
       orderBy: { updatedAt: 'desc' },
-    });
+      skip,
+      take: pageSize,
+    }),
 
-    return { items };
-  }
+    this.prisma.request.count({ where }),
+  ]);
+
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+  };
+}
 
 // request controller 
 //   @Get('driver/my-jobs')
@@ -179,7 +297,14 @@ export class RequestsController {
   }
 
 
+  @Get('types')
+async listRequestTypes() {
+  const items = await this.prisma.requestType.findMany({
+    orderBy: { name: 'asc' },
+  });
 
+  return { items };
+}
 
   // GET by id with events + assignments
   @Get(':id')
@@ -194,6 +319,9 @@ export class RequestsController {
       },
     });
   }
+
+
+
 
   // PATCH (status, priority, dueAt)
 @Patch(':id')
@@ -391,7 +519,7 @@ async remove(@Req() req: any, @Param('id') id: string) {
       const current = await this.prisma.request.findUnique({
         where: { id }, select: { currentStatus: true }
       });
-      if (current && ['NEW', 'TRIAGE'].includes(current.currentStatus)) {
+      if (current && current.currentStatus === 'NEW') {
         await this.prisma.request.update({
           where: { id }, data: { currentStatus: 'ASSIGNED' as any }
         });
@@ -477,15 +605,12 @@ async getMyJobs(@Req() req: any) {
     const current = await this.prisma.request.findUnique({
       where: { id }, select: { currentStatus: true }
     });
-    if (current && ['NEW'].includes(current.currentStatus)) {
+if (current && current.currentStatus === 'NEW') {
   await this.prisma.request.update({
-    where: { id }, data: { currentStatus: 'ASSIGNED' as any }
+    where: { id },
+    data: { currentStatus: 'ASSIGNED' as any },
   });
-} {
-      await this.prisma.request.update({
-        where: { id }, data: { currentStatus: 'ASSIGNED' as any }
-      });
-    }
+}
 
     await this.prisma.requestEvent.create({
       data: {
@@ -523,6 +648,104 @@ async getMyJobs(@Req() req: any) {
 
     return { ok: true, removed: 1 };
   }
+
+
+
+// UPLOAD DOCUMENTS: Cotizacion / Orden de compra / Remision
+@Post(':id/documents/:kind')
+@UseInterceptors(
+  FilesInterceptor('files', 10, {
+    storage: diskStorage({
+      destination: (_req, _file, cb) => {
+        ensureUploadsFolder();
+        cb(null, 'uploads');
+      },
+      filename: (_req, file, cb) => {
+        const uniq = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+        cb(null, `${uniq}${extname(file.originalname)}`);
+      },
+    }),
+    fileFilter: (_req, file, cb) => {
+      if (ALLOWED_DOCUMENT_MIMES.has(file.mimetype)) {
+        return cb(null, true);
+      }
+
+      return cb(
+        new BadRequestException(
+          'Unsupported file type. Allowed: PDF, images, Word, Excel, PowerPoint, text, CSV, and ZIP.',
+        ) as any,
+        false,
+      );
+    },
+    limits: { fileSize: 15 * 1024 * 1024 },
+  }),
+)
+async uploadDocuments(
+  @Req() req: any,
+  @Param('id') id: string,
+  @Param('kind') kind: DocumentKind,
+  @UploadedFiles() files: Express.Multer.File[],
+) {
+  if (!DOCUMENT_KINDS.includes(kind)) {
+    throw new BadRequestException('Invalid document type');
+  }
+
+  if (!files || files.length === 0) {
+    return { uploaded: [] };
+  }
+
+  const request = await this.prisma.request.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+
+  if (!request) {
+    throw new NotFoundException('Request not found');
+  }
+
+  const created = await Promise.all(
+    files.map((f) =>
+      this.prisma.attachment.create({
+        data: {
+          requestId: id,
+          uploadedById: req.user.userId,
+          url: `/uploads/${f.filename}`,
+          name: f.originalname,
+          size: f.size,
+          mime: f.mimetype,
+        },
+      }),
+    ),
+  );
+
+  await this.prisma.requestEvent.create({
+    data: {
+      requestId: id,
+      actorId: req.user.userId,
+      eventType: 'document_added',
+      payloadJson: JSON.stringify({
+        kind,
+        label: DOCUMENT_KIND_LABELS[kind],
+        attachments: created.map((a) => ({
+          id: a.id,
+          url: a.url,
+          name: a.name,
+          size: a.size,
+          mime: a.mime,
+          createdAt: a.createdAt,
+        })),
+      }),
+    },
+  });
+
+  return {
+    ok: true,
+    kind,
+    label: DOCUMENT_KIND_LABELS[kind],
+    uploaded: created,
+  };
+}
+  
 
   // UPLOAD ATTACHMENTS (images)
   @Post(':id/attachments')

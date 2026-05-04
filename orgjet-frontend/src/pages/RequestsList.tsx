@@ -72,7 +72,6 @@ export default function RequestsList() {
           >
             <option value="">All</option>
             <option value="NEW">NEW</option>
-            <option value="TRIAGE">TRIAGE</option>
             <option value="ASSIGNED">ASSIGNED</option>
             <option value="IN_PROGRESS">IN_PROGRESS</option>
             <option value="BLOCKED">BLOCKED</option>

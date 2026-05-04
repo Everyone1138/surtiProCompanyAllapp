@@ -30,6 +30,29 @@ function ensureUploadsFolder() {
     if (!(0, fs_1.existsSync)('uploads'))
         (0, fs_1.mkdirSync)('uploads', { recursive: true });
 }
+const DOCUMENT_KINDS = ['cotizacion', 'orden-compra', 'remision'];
+const DOCUMENT_KIND_LABELS = {
+    cotizacion: 'Cotizacion',
+    'orden-compra': 'Orden de compra',
+    remision: 'Remision',
+};
+const ALLOWED_DOCUMENT_MIMES = new Set([
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain',
+    'text/csv',
+    'application/zip',
+    'application/x-zip-compressed',
+]);
 class CreateRequestDto {
 }
 __decorate([
@@ -95,51 +118,107 @@ let RequestsController = class RequestsController {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    async list(req, status, team, type, search, mine) {
+    async list(req, status, team, type, search, q, mine, assigneeId, pageRaw, pageSizeRaw) {
         var _a, _b;
-        const where = {};
+        const page = Math.max(1, Number(pageRaw || '1'));
+        const pageSize = Math.min(100, Math.max(1, Number(pageSizeRaw || '25')));
+        const skip = (page - 1) * pageSize;
+        const andFilters = [];
         if (status) {
-            const statuses = status.split(',').map((s) => s.trim()).filter(Boolean);
-            where.currentStatus = statuses.length > 1 ? { in: statuses } : statuses[0];
+            const statuses = status
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+            if (statuses.length > 0) {
+                andFilters.push({
+                    currentStatus: statuses.length > 1 ? { in: statuses } : statuses[0],
+                });
+            }
         }
-        if (team)
-            where.team = { name: team };
-        if (type)
-            where.type = { name: type };
-        if (search) {
-            where.OR = [
-                { title: { contains: search, mode: 'insensitive' } },
-                { description: { contains: search, mode: 'insensitive' } },
-            ];
+        if (team) {
+            andFilters.push({
+                team: { is: { name: team } },
+            });
+        }
+        if (type) {
+            andFilters.push({
+                type: { is: { name: type } },
+            });
+        }
+        const term = (q || search || '').trim();
+        if (term) {
+            andFilters.push({
+                OR: [
+                    { title: { contains: term } },
+                    { description: { contains: term } },
+                    { company: { contains: term } },
+                    { companyId: { contains: term } },
+                    { currentStatus: { contains: term } },
+                    { priority: { contains: term } },
+                    { metadataJson: { contains: term } },
+                    { assignee: { is: { name: { contains: term } } } },
+                    { assignee: { is: { email: { contains: term } } } },
+                    {
+                        assignments: {
+                            some: {
+                                user: {
+                                    OR: [
+                                        { name: { contains: term } },
+                                        { email: { contains: term } },
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                    { type: { is: { name: { contains: term } } } },
+                    { team: { is: { name: { contains: term } } } },
+                ],
+            });
+        }
+        if (assigneeId) {
+            andFilters.push({
+                OR: [
+                    { assigneeId },
+                    { assignments: { some: { userId: assigneeId } } },
+                ],
+            });
         }
         const uid = ((_a = req === null || req === void 0 ? void 0 : req.user) === null || _a === void 0 ? void 0 : _a.userId) || ((_b = req === null || req === void 0 ? void 0 : req.user) === null || _b === void 0 ? void 0 : _b.id);
         if (mine === '1' && uid) {
-            const mineOr = [
-                { assignments: { some: { userId: uid } } },
-                { assigneeId: uid },
-            ];
-            if (where.OR) {
-                where.OR = [...where.OR, ...mineOr];
-            }
-            else {
-                where.__mineOr = mineOr;
-            }
+            andFilters.push({
+                OR: [
+                    { assignments: { some: { userId: uid } } },
+                    { assigneeId: uid },
+                    { createdById: uid },
+                ],
+            });
         }
-        let finalWhere = where;
-        if (where.__mineOr) {
-            const { __mineOr, ...rest } = where;
-            finalWhere = { AND: [rest, { OR: __mineOr }] };
-        }
-        const items = await this.prisma.request.findMany({
-            where: finalWhere,
-            include: {
-                type: true,
-                team: true,
-                assignments: { include: { user: { select: { id: true, name: true } } } },
-            },
-            orderBy: { updatedAt: 'desc' },
-        });
-        return { items };
+        const where = andFilters.length > 0 ? { AND: andFilters } : {};
+        const [items, total] = await Promise.all([
+            this.prisma.request.findMany({
+                where,
+                include: {
+                    type: true,
+                    team: true,
+                    assignee: { select: { id: true, name: true, email: true } },
+                    assignments: {
+                        include: {
+                            user: { select: { id: true, name: true, email: true, role: true } },
+                        },
+                    },
+                },
+                orderBy: { updatedAt: 'desc' },
+                skip,
+                take: pageSize,
+            }),
+            this.prisma.request.count({ where }),
+        ]);
+        return {
+            items,
+            total,
+            page,
+            pageSize,
+        };
     }
     async create(req, dto) {
         var _a, _b, _c, _d;
@@ -170,6 +249,12 @@ let RequestsController = class RequestsController {
             },
         });
         return created;
+    }
+    async listRequestTypes() {
+        const items = await this.prisma.requestType.findMany({
+            orderBy: { name: 'asc' },
+        });
+        return { items };
     }
     async get(id) {
         return this.prisma.request.findUnique({
@@ -319,7 +404,7 @@ let RequestsController = class RequestsController {
             const current = await this.prisma.request.findUnique({
                 where: { id }, select: { currentStatus: true }
             });
-            if (current && ['NEW', 'TRIAGE'].includes(current.currentStatus)) {
+            if (current && current.currentStatus === 'NEW') {
                 await this.prisma.request.update({
                     where: { id }, data: { currentStatus: 'ASSIGNED' }
                 });
@@ -381,14 +466,10 @@ let RequestsController = class RequestsController {
         const current = await this.prisma.request.findUnique({
             where: { id }, select: { currentStatus: true }
         });
-        if (current && ['NEW'].includes(current.currentStatus)) {
+        if (current && current.currentStatus === 'NEW') {
             await this.prisma.request.update({
-                where: { id }, data: { currentStatus: 'ASSIGNED' }
-            });
-        }
-        {
-            await this.prisma.request.update({
-                where: { id }, data: { currentStatus: 'ASSIGNED' }
+                where: { id },
+                data: { currentStatus: 'ASSIGNED' },
             });
         }
         await this.prisma.requestEvent.create({
@@ -416,6 +497,56 @@ let RequestsController = class RequestsController {
             },
         });
         return { ok: true, removed: 1 };
+    }
+    async uploadDocuments(req, id, kind, files) {
+        if (!DOCUMENT_KINDS.includes(kind)) {
+            throw new common_2.BadRequestException('Invalid document type');
+        }
+        if (!files || files.length === 0) {
+            return { uploaded: [] };
+        }
+        const request = await this.prisma.request.findUnique({
+            where: { id },
+            select: { id: true },
+        });
+        if (!request) {
+            throw new common_1.NotFoundException('Request not found');
+        }
+        const created = await Promise.all(files.map((f) => this.prisma.attachment.create({
+            data: {
+                requestId: id,
+                uploadedById: req.user.userId,
+                url: `/uploads/${f.filename}`,
+                name: f.originalname,
+                size: f.size,
+                mime: f.mimetype,
+            },
+        })));
+        await this.prisma.requestEvent.create({
+            data: {
+                requestId: id,
+                actorId: req.user.userId,
+                eventType: 'document_added',
+                payloadJson: JSON.stringify({
+                    kind,
+                    label: DOCUMENT_KIND_LABELS[kind],
+                    attachments: created.map((a) => ({
+                        id: a.id,
+                        url: a.url,
+                        name: a.name,
+                        size: a.size,
+                        mime: a.mime,
+                        createdAt: a.createdAt,
+                    })),
+                }),
+            },
+        });
+        return {
+            ok: true,
+            kind,
+            label: DOCUMENT_KIND_LABELS[kind],
+            uploaded: created,
+        };
     }
     async uploadAttachments(req, id, files) {
         if (!files || files.length === 0)
@@ -493,9 +624,13 @@ __decorate([
     __param(2, (0, common_1.Query)('team')),
     __param(3, (0, common_1.Query)('type')),
     __param(4, (0, common_1.Query)('search')),
-    __param(5, (0, common_1.Query)('mine')),
+    __param(5, (0, common_1.Query)('q')),
+    __param(6, (0, common_1.Query)('mine')),
+    __param(7, (0, common_1.Query)('assigneeId')),
+    __param(8, (0, common_1.Query)('page')),
+    __param(9, (0, common_1.Query)('pageSize')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String, String, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "list", null);
 __decorate([
@@ -506,6 +641,12 @@ __decorate([
     __metadata("design:paramtypes", [Object, CreateRequestDto]),
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "create", null);
+__decorate([
+    (0, common_1.Get)('types'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], RequestsController.prototype, "listRequestTypes", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id')),
@@ -582,6 +723,35 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, Object]),
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "removeAssignee", null);
+__decorate([
+    (0, common_1.Post)(':id/documents/:kind'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('files', 10, {
+        storage: (0, multer_1.diskStorage)({
+            destination: (_req, _file, cb) => {
+                ensureUploadsFolder();
+                cb(null, 'uploads');
+            },
+            filename: (_req, file, cb) => {
+                const uniq = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+                cb(null, `${uniq}${(0, path_1.extname)(file.originalname)}`);
+            },
+        }),
+        fileFilter: (_req, file, cb) => {
+            if (ALLOWED_DOCUMENT_MIMES.has(file.mimetype)) {
+                return cb(null, true);
+            }
+            return cb(new common_2.BadRequestException('Unsupported file type. Allowed: PDF, images, Word, Excel, PowerPoint, text, CSV, and ZIP.'), false);
+        },
+        limits: { fileSize: 15 * 1024 * 1024 },
+    })),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Param)('kind')),
+    __param(3, (0, common_1.UploadedFiles)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String, Array]),
+    __metadata("design:returntype", Promise)
+], RequestsController.prototype, "uploadDocuments", null);
 __decorate([
     (0, common_1.Post)(':id/attachments'),
     (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('files', 5, {

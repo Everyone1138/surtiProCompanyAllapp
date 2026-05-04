@@ -17,17 +17,18 @@ export default function NewRequest() {
   const navigate = useNavigate()
   const [company, setCompany] = useState('')
   const [companyId, setCompanyId] = useState('')
+  const [equipmentId, setEquipmentId] = useState('')
+  const [serialNumber, setSerialNumber] = useState('')
+  const [workOrderNumber, setWorkOrderNumber] = useState('')  
   
 
-  useEffect(() => {
-    api.get('/requests').then(res => {
-      const tset = new Map<string, any>()
-      res.data.items.forEach((r:any)=> tset.set(r.type.id, r.type))
-      const arr = Array.from(tset.values())
-      setTypes(arr)
-      if (!typeId && arr[0]) setTypeId(arr[0].id)
-    })
-  }, [])
+useEffect(() => {
+  api.get('/requests/types').then(res => {
+    const arr = res.data.items || []
+    setTypes(arr)
+    if (!typeId && arr[0]) setTypeId(arr[0].id)
+  })
+}, [])
 
   function toISOEndOfDay(localYMD: string) {
     if (!localYMD) return null
@@ -44,6 +45,11 @@ export default function NewRequest() {
       if (iso) payload.dueAt = iso
       if (company.trim()) payload.company = company.trim()
       if (companyId.trim()) payload.companyId = companyId.trim()
+      payload.metadata = {
+  equipmentId: equipmentId.trim() || null,
+  serialNumber: serialNumber.trim() || null,
+  workOrderNumber: workOrderNumber.trim() || null,
+}
       
 
       // 1) create request
@@ -85,18 +91,42 @@ export default function NewRequest() {
           </select>
           <input type="date" className="border rounded p-2" value={dueDate} onChange={e=>setDueDate(e.target.value)} aria-label="Due date" />
         </div>
- <input
-    className="border rounded p-2 md:col-span-2"
+<div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+  <input
+    className="border rounded p-2"
     placeholder="Company"
     value={company}
-    onChange={e=>setCompany(e.target.value)}
+    onChange={e => setCompany(e.target.value)}
   />
+
   <input
     className="border rounded p-2"
     placeholder="ID number"
     value={companyId}
-    onChange={e=>setCompanyId(e.target.value)}
+    onChange={e => setCompanyId(e.target.value)}
   />
+
+  <input
+    className="border rounded p-2"
+    placeholder="Equipment ID"
+    value={equipmentId}
+    onChange={e => setEquipmentId(e.target.value)}
+  />
+
+  <input
+    className="border rounded p-2"
+    placeholder="Serial Number"
+    value={serialNumber}
+    onChange={e => setSerialNumber(e.target.value)}
+  />
+
+  <input
+    className="border rounded p-2 md:col-span-2"
+    placeholder="Work Order Number"
+    value={workOrderNumber}
+    onChange={e => setWorkOrderNumber(e.target.value)}
+  />
+</div>
 
         {/* Files from disk (also supports mobile camera via file picker) */}
         <div className="space-y-1">

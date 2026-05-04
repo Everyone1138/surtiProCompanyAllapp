@@ -11,6 +11,7 @@ import RequestDetail from './pages/RequestDetail'
 import RouteError from './components/RouteError'
 import RequestsList from './pages/RequestsList'
 import DriverJobs from './pages/DriverJobs'
+import JobSearch from './pages/JobSearch'
 
 const router = createBrowserRouter([
   {
@@ -22,6 +23,7 @@ const router = createBrowserRouter([
       { path: 'board', element: <Board /> },
       { path: 'new', element: <NewRequest /> },
       { path: 'driver', element: <DriverJobs />, errorElement: <RouteError /> },
+      { path: 'job-search', element: <JobSearch />, errorElement: <RouteError /> },
       { path: 'r/:id', element: <RequestDetail /> },
       { path: 'my-work', element: <MyWork />, errorElement: <RouteError /> },
       { path: 'requests', element: <RequestsList />, errorElement: <RouteError /> },

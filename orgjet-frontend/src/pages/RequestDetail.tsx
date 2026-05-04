@@ -1,24 +1,48 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { api, listUsers, addAssignees as apiAddAssignees, removeAssignee as apiRemoveAssignee } from '../lib/api';
-import CameraCapture from '../components/CameraCapture';
-import { useNavigate } from 'react-router-dom';
-import { deleteRequest } from '../lib/api';
-import { useLocation } from 'react-router-dom';
-import { Outlet } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
+import {
+  api,
+  listUsers,
+  addAssignees as apiAddAssignees,
+  removeAssignee as apiRemoveAssignee,
+  uploadRequestDocuments,
+} from "../lib/api";
+import CameraCapture from "../components/CameraCapture";
+import { useNavigate } from "react-router-dom";
+import { deleteRequest } from "../lib/api";
+import { useLocation } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 
+
+const JOB_STATUSES = [
+  'NEW',
+  'ASSIGNED',
+  'DISASSEMBLE',
+  'PURCHASES',
+  'EN_ROUTE_PICKUP',
+  'PICKED_UP',
+  'EN_ROUTE_DROPOFF',
+  'DELIVERED',
+  'CANCELLED',
+  'ISSUE',
+] as const;
+
+function statusLabel(status: string) {
+  return status.replace(/_/g, ' ');
+}
 
 export default function RequestDetail() {
-
   const { id } = useParams();
   const [data, setData] = useState<any | null>(null);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const [changingStatus, setChangingStatus] = useState(false);
+
   // comments / posts
-  const [comment, setComment] = useState('');
-  const [postText, setPostText] = useState('');
+  const [comment, setComment] = useState("");
+  const [postText, setPostText] = useState("");
   const [postFiles, setPostFiles] = useState<FileList | null>(null);
   const [posting, setPosting] = useState(false);
   const [showCameraPost, setShowCameraPost] = useState(false);
@@ -27,87 +51,87 @@ export default function RequestDetail() {
   // users & assignment UI
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]); // for legacy single-assign dropdown
-  const [meId, setMeId] = useState('');
+  const [meId, setMeId] = useState("");
   const [assigning, setAssigning] = useState(false);
   const [selected, setSelected] = useState<string[]>([]); // multi-select
 
   // activity sort
-  const [activitySort, setActivitySort] = useState<'desc' | 'asc' | 'attachments'>('desc');
-  
+  const [activitySort, setActivitySort] = useState<
+    "desc" | "asc" | "attachments"
+  >("desc");
+
   const location = useLocation();
 
+  const [uploadingDocKind, setUploadingDocKind] = useState<string | null>(null);
 
+  const cotizacionInputRef = useRef<HTMLInputElement | null>(null);
+  const ordenCompraInputRef = useRef<HTMLInputElement | null>(null);
+  const remisionInputRef = useRef<HTMLInputElement | null>(null);
 
+  async function handleDelete() {
+    if (!id) return;
+    const ok = window.confirm("Delete this request? This cannot be undone.");
+    if (!ok) return;
 
-async function handleDelete() {
-  if (!id) return;
-  const ok = window.confirm('Delete this request? This cannot be undone.');
-  if (!ok) return;
+    try {
+      await deleteRequest(id);
 
-  try {
-    await deleteRequest(id);
-
-    // Redirect somewhere you know exists:
-    const fallback = '/my-work'; // or '/requests' if that route exists
-    navigate(fallback, { replace: true });
-  } catch (e: any) {
-    alert(e?.response?.data?.message || 'Failed to delete request');
-  }
-}
-
-
-
-
-async function refresh() {
-  if (!id) return;
-  setLoading(true);
-  setErrorMsg(null);
-  try {
-    const res = await api.get(`/requests/${id}`);
-    setData(res.data);
-  } catch (e: any) {
-    const status = e?.response?.status;
-    if (status === 404) {
-      // request no longer exists -> go back to a safe route
-      navigate('/my-work', { replace: true });
-      return;
+      // Redirect somewhere you know exists:
+      const fallback = "/my-work"; // or '/requests' if that route exists
+      navigate(fallback, { replace: true });
+    } catch (e: any) {
+      alert(e?.response?.data?.message || "Failed to delete request");
     }
-    setErrorMsg(e?.response?.data?.message || e?.message || 'Failed to load request');
-  } finally {
-    setLoading(false);
   }
-}
 
+  async function refresh() {
+    if (!id) return;
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await api.get(`/requests/${id}`);
+      setData(res.data);
+    } catch (e: any) {
+      const status = e?.response?.status;
+      if (status === 404) {
+        // request no longer exists -> go back to a safe route
+        navigate("/my-work", { replace: true });
+        return;
+      }
+      setErrorMsg(
+        e?.response?.data?.message || e?.message || "Failed to load request",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
-
-useEffect(() => {
-  if (!id) return;
-  refresh();
-}, [id]);
-
-
+  useEffect(() => {
+    if (!id) return;
+    refresh();
+  }, [id]);
 
   // Load users once (for both multi-select and legacy dropdown)
-useEffect(() => {
-  listUsers()
-    .then((res) => {
-      const arr = Array.isArray(res) ? res : (res?.users ?? []);
-      setAllUsers(arr || []);
-      setUsers(arr || []);
-      setMeId(res?.meId ?? '');
-    })
-    .catch(() => {
-      setAllUsers([]);
-      setUsers([]);
-      setMeId('');
-    });
-}, []);
+  useEffect(() => {
+    listUsers()
+      .then((res) => {
+        const arr = Array.isArray(res) ? res : res?.users ?? [];
+        setAllUsers(arr || []);
+        setUsers(arr || []);
+        setMeId(res?.meId ?? "");
+      })
+      .catch(() => {
+        setAllUsers([]);
+        setUsers([]);
+        setMeId("");
+      });
+  }, []);
 
   // Helpers
   const eventHasAttachments = (ev: any): boolean => {
     try {
-      if (ev.eventType === 'attachment_added') return true;
-      if (ev.eventType === 'post') {
+      if (ev.eventType === "attachment_added") return true;
+      if (ev.eventType === "post") {
         const p = ev.payloadJson ? JSON.parse(ev.payloadJson) : {};
         return Array.isArray(p.attachments) && p.attachments.length > 0;
       }
@@ -117,7 +141,7 @@ useEffect(() => {
 
   const eventsSorted = useMemo(() => {
     const arr = [...(data?.events ?? [])];
-    if (activitySort === 'attachments') {
+    if (activitySort === "attachments") {
       arr.sort((a: any, b: any) => {
         const ah = eventHasAttachments(a) ? 1 : 0;
         const bh = eventHasAttachments(b) ? 1 : 0;
@@ -131,7 +155,7 @@ useEffect(() => {
     arr.sort((a: any, b: any) => {
       const at = new Date(a.createdAt).getTime();
       const bt = new Date(b.createdAt).getTime();
-      return activitySort === 'asc' ? at - bt : bt - at;
+      return activitySort === "asc" ? at - bt : bt - at;
     });
     return arr;
   }, [data?.events, activitySort]);
@@ -139,21 +163,33 @@ useEffect(() => {
   async function submitPost(e: React.FormEvent) {
     e.preventDefault();
     if (!id) return;
-    if (!postText.trim() && (!postFiles || postFiles.length === 0) && capturedPost.length === 0) return;
+    if (
+      !postText.trim() &&
+      (!postFiles || postFiles.length === 0) &&
+      capturedPost.length === 0
+    )
+      return;
 
     setPosting(true);
     try {
       const form = new FormData();
-      if (postText.trim()) form.append('text', postText.trim());
+      if (postText.trim()) form.append("text", postText.trim());
       if (postFiles && postFiles.length > 0) {
-        Array.from(postFiles).forEach((f) => form.append('files', f));
+        Array.from(postFiles).forEach((f) => form.append("files", f));
       }
       capturedPost.forEach((b, i) =>
-        form.append('files', new File([b], `post-photo-${Date.now()}-${i}.jpg`, { type: 'image/jpeg' })),
+        form.append(
+          "files",
+          new File([b], `post-photo-${Date.now()}-${i}.jpg`, {
+            type: "image/jpeg",
+          }),
+        ),
       );
 
-      await api.post(`/requests/${id}/post`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setPostText('');
+      await api.post(`/requests/${id}/post`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setPostText("");
       setPostFiles(null);
       setCapturedPost([]);
       await refresh();
@@ -162,13 +198,49 @@ useEffect(() => {
     }
   }
 
+  async function handleDocumentUpload(
+    kind: "cotizacion" | "orden-compra" | "remision",
+    files: FileList | null,
+  ) {
+    if (!id || !files || files.length === 0) return;
+
+    setUploadingDocKind(kind);
+
+    try {
+      await uploadRequestDocuments(id, kind, files);
+      await refresh();
+    } catch (e: any) {
+      alert(e?.response?.data?.message || "Failed to upload document");
+    } finally {
+      setUploadingDocKind(null);
+    }
+  }
+
   async function addComment(e: React.FormEvent) {
     e.preventDefault();
     if (!comment.trim() || !id) return;
     await api.post(`/requests/${id}/comment`, { body: comment });
-    setComment('');
+    setComment("");
     await refresh();
   }
+async function changeStatus(status: string) {
+  if (!id) return;
+
+  const confirmed = window.confirm(`Change status to ${statusLabel(status)}?`);
+  if (!confirmed) return;
+
+  setChangingStatus(true);
+
+  try {
+    await api.patch(`/requests/${id}`, { status });
+    await refresh();
+  } catch (e: any) {
+    alert(e?.response?.data?.message || 'Failed to update status');
+  } finally {
+    setChangingStatus(false);
+  }
+}
+
 
   // Legacy single-assign endpoint (backend maps it to the join table now)
   async function assignTo(assigneeId: string) {
@@ -197,44 +269,49 @@ useEffect(() => {
     await refresh();
   };
 
- if (loading) {
-  return <div className="p-4 text-sm text-gray-600">Loading…</div>;
-}
-if (errorMsg) {
-  return (
-    <div className="p-4">
-      <div className="text-red-600 text-sm mb-2">Error: {errorMsg}</div>
-      <button className="border rounded px-3 py-1 text-sm" onClick={() => refresh()}>
-        Retry
-      </button>
-    </div>
-  );
-}
-if (!data) {
-  // Loaded but nothing came back (defensive)
-  return (
-    <div className="p-4 text-sm text-gray-600">
-      Request not found. <button className="underline" onClick={() => navigate('/my-work')}>Back to My Work</button>
-    </div>
-  );
-}
+  if (loading) {
+    return <div className="p-4 text-sm text-gray-600">Loading…</div>;
+  }
+  if (errorMsg) {
+    return (
+      <div className="p-4">
+        <div className="text-red-600 text-sm mb-2">Error: {errorMsg}</div>
+        <button
+          className="border rounded px-3 py-1 text-sm"
+          onClick={() => refresh()}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  if (!data) {
+    // Loaded but nothing came back (defensive)
+    return (
+      <div className="p-4 text-sm text-gray-600">
+        Request not found.{" "}
+        <button className="underline" onClick={() => navigate("/my-work")}>
+          Back to My Work
+        </button>
+      </div>
+    );
+  }
 
   // Derived: names joined for list-style display if needed
   const assigneeNames = (data.assignments || [])
     .map((a: any) => a.user?.name)
     .filter(Boolean)
-    .join(', ');
+    .join(", ");
 
+  const orderedUsers = [
+    ...users.filter((u: any) => u.id === meId),
+    ...users.filter((u: any) => u.id !== meId),
+  ];
 
-    const orderedUsers = [
-  ...users.filter((u: any) => u.id === meId),
-  ...users.filter((u: any) => u.id !== meId),
-];
-
-const orderedAllUsers = [
-  ...allUsers.filter((u: any) => u.id === meId),
-  ...allUsers.filter((u: any) => u.id !== meId),
-];
+  const orderedAllUsers = [
+    ...allUsers.filter((u: any) => u.id === meId),
+    ...allUsers.filter((u: any) => u.id !== meId),
+  ];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -245,12 +322,65 @@ const orderedAllUsers = [
         <div className="text-sm text-gray-600">
           {data.type?.name} • {data.priority} • {data.currentStatus}
           {(data.company || data.companyId) && (
-            <> • {data.company ?? ''}{data.company && data.companyId ? ' — ' : ''}{data.companyId ?? ''}</>
+            <>
+              {" "}
+              • {data.company ?? ""}
+              {data.company && data.companyId ? " — " : ""}
+              {data.companyId ?? ""}
+            </>
           )}
           {assigneeNames && <> • Assigned: {assigneeNames}</>}
         </div>
 
-        <p className="bg-white p-3 rounded border whitespace-pre-wrap">{data.description}</p>
+        <p className="bg-white p-3 rounded border whitespace-pre-wrap">
+          {data.description}
+        </p>
+
+        {(() => {
+  let metadata: any = {}
+
+  try {
+    metadata = data.metadataJson ? JSON.parse(data.metadataJson) : {}
+  } catch {
+    metadata = {}
+  }
+
+  const hasExtraFields =
+    metadata.equipmentId ||
+    metadata.serialNumber ||
+    metadata.workOrderNumber
+
+  if (!hasExtraFields) return null
+
+  return (
+    <div className="bg-white p-3 rounded border text-sm">
+      <div className="font-semibold mb-2">Job Details</div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {metadata.equipmentId ? (
+          <div>
+            <div className="text-gray-500">Equipment ID</div>
+            <div className="font-medium">{metadata.equipmentId}</div>
+          </div>
+        ) : null}
+
+        {metadata.serialNumber ? (
+          <div>
+            <div className="text-gray-500">Serial Number</div>
+            <div className="font-medium">{metadata.serialNumber}</div>
+          </div>
+        ) : null}
+
+        {metadata.workOrderNumber ? (
+          <div>
+            <div className="text-gray-500">Work Order Number</div>
+            <div className="font-medium">{metadata.workOrderNumber}</div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+})()}
 
         {/* NEW POST */}
         <div className="bg-white rounded border p-3">
@@ -290,10 +420,17 @@ const orderedAllUsers = [
                   const url = URL.createObjectURL(b);
                   return (
                     <div key={i} className="relative">
-                      <img src={url} className="w-full h-24 object-cover rounded border" />
+                      <img
+                        src={url}
+                        className="w-full h-24 object-cover rounded border"
+                      />
                       <button
                         type="button"
-                        onClick={() => setCapturedPost((prev) => prev.filter((_, idx) => idx !== i))}
+                        onClick={() =>
+                          setCapturedPost((prev) =>
+                            prev.filter((_, idx) => idx !== i),
+                          )
+                        }
                         className="absolute top-1 right-1 text-xs bg-white/90 border rounded px-1"
                         title="Remove"
                       >
@@ -306,15 +443,22 @@ const orderedAllUsers = [
             )}
 
             {postFiles && postFiles.length > 0 && (
-              <span className="text-xs text-gray-600">{postFiles.length} file(s) selected</span>
+              <span className="text-xs text-gray-600">
+                {postFiles.length} file(s) selected
+              </span>
             )}
 
             <div className="flex justify-end">
               <button
                 className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
-                disabled={posting || (!postText.trim() && (!postFiles || postFiles.length === 0) && capturedPost.length === 0)}
+                disabled={
+                  posting ||
+                  (!postText.trim() &&
+                    (!postFiles || postFiles.length === 0) &&
+                    capturedPost.length === 0)
+                }
               >
-                {posting ? 'Posting…' : 'Post'}
+                {posting ? "Posting…" : "Post"}
               </button>
             </div>
           </form>
@@ -327,7 +471,11 @@ const orderedAllUsers = [
             Sort:
             <select
               value={activitySort}
-              onChange={(e) => setActivitySort(e.target.value as 'asc' | 'desc' | 'attachments')}
+              onChange={(e) =>
+                setActivitySort(
+                  e.target.value as "asc" | "desc" | "attachments",
+                )
+              }
               className="border rounded p-1 text-sm"
             >
               <option value="desc">Newest first</option>
@@ -355,30 +503,67 @@ const orderedAllUsers = [
                   {ts} • {ev.actor?.name} • {ev.eventType}
                 </div>
 
-                {ev.eventType === 'comment' && payload?.body && (
+                {ev.eventType === "comment" && payload?.body && (
                   <div className="mt-1 whitespace-pre-wrap">{payload.body}</div>
                 )}
 
-                {ev.eventType === 'assigned' && (
+                {ev.eventType === "assigned" && (
                   <div className="mt-1">
-                    Assigned to: <span className="font-medium">{payload?.assigneeId || '—'}</span>
+                    Assigned to:{" "}
+                    <span className="font-medium">
+                      {payload?.assigneeId || "—"}
+                    </span>
                   </div>
                 )}
 
-                {ev.eventType === 'created' && (
+                {ev.eventType === "created" && (
                   <div className="mt-1 text-gray-700">
                     {payload?.title ? (
                       <>
-                        Title: <span className="font-medium">{payload.title}</span>
+                        Title:{" "}
+                        <span className="font-medium">{payload.title}</span>
                       </>
                     ) : null}
-                    {payload?.dueAt ? <> • Due: {new Date(payload.dueAt).toLocaleDateString()}</> : null}
-                    {payload?.company ? <> • Company: {payload.company}</> : null}
-                    {payload?.companyId ? <> • ID: {payload.companyId}</> : null}
+                    {payload?.dueAt ? (
+                      <>
+                        {" "}
+                        • Due: {new Date(payload.dueAt).toLocaleDateString()}
+                      </>
+                    ) : null}
+                    {payload?.company ? (
+                      <> • Company: {payload.company}</>
+                    ) : null}
+                    {payload?.companyId ? (
+                      <> • ID: {payload.companyId}</>
+                    ) : null}
                   </div>
                 )}
 
-                {ev.eventType === 'attachment_added' &&
+                {ev.eventType === "document_added" &&
+                  Array.isArray(payload?.attachments) &&
+                  payload.attachments.length > 0 && (
+                    <div className="mt-2">
+                      <div className="font-medium text-gray-700 mb-2">
+                        {payload?.label || "Document"} uploaded
+                      </div>
+
+                      <div className="space-y-1">
+                        {payload.attachments.map((a: any) => (
+                          <a
+                            key={a.id}
+                            href={a.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block text-blue-600 hover:underline text-sm"
+                          >
+                            {a.name || "Open file"}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                {ev.eventType === "attachment_added" &&
                   Array.isArray(payload?.attachments) &&
                   payload.attachments.length > 0 && (
                     <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
@@ -389,50 +574,72 @@ const orderedAllUsers = [
                           target="_blank"
                           rel="noreferrer"
                           className="block group"
-                          title={`${a.name} • ${new Date(a.createdAt).toLocaleString()}`}
+                          title={`${a.name} • ${new Date(
+                            a.createdAt,
+                          ).toLocaleString()}`}
                         >
                           <img
                             src={a.url}
                             className="w-full h-28 object-cover rounded border group-hover:opacity-90"
-                            alt={a.name || 'attachment'}
+                            alt={a.name || "attachment"}
                             loading="lazy"
                           />
-                          <div className="mt-1 text-[10px] text-gray-500 truncate">{a.name}</div>
+                          <div className="mt-1 text-[10px] text-gray-500 truncate">
+                            {a.name}
+                          </div>
                         </a>
                       ))}
                     </div>
                   )}
 
-                {ev.eventType === 'post' && (
+                {ev.eventType === "post" && (
                   <>
-                    {payload?.text && <div className="mt-1 whitespace-pre-wrap">{payload.text}</div>}
-                    {Array.isArray(payload?.attachments) && payload.attachments.length > 0 && (
-                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                        {payload.attachments.map((a: any) => (
-                          <a
-                            key={a.id}
-                            href={a.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block group"
-                            title={`${a.name} • ${new Date(a.createdAt).toLocaleString()}`}
-                          >
-                            <img
-                              src={a.url}
-                              className="w-full h-28 object-cover rounded border group-hover:opacity-90"
-                              alt={a.name || 'post image'}
-                              loading="lazy"
-                            />
-                            <div className="mt-1 text-[10px] text-gray-500 truncate">{a.name}</div>
-                          </a>
-                        ))}
+                    {payload?.text && (
+                      <div className="mt-1 whitespace-pre-wrap">
+                        {payload.text}
                       </div>
                     )}
+                    {Array.isArray(payload?.attachments) &&
+                      payload.attachments.length > 0 && (
+                        <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                          {payload.attachments.map((a: any) => (
+                            <a
+                              key={a.id}
+                              href={a.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block group"
+                              title={`${a.name} • ${new Date(
+                                a.createdAt,
+                              ).toLocaleString()}`}
+                            >
+                              <img
+                                src={a.url}
+                                className="w-full h-28 object-cover rounded border group-hover:opacity-90"
+                                alt={a.name || "post image"}
+                                loading="lazy"
+                              />
+                              <div className="mt-1 text-[10px] text-gray-500 truncate">
+                                {a.name}
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      )}
                   </>
                 )}
 
-                {!['comment', 'assigned', 'created', 'attachment_added', 'post'].includes(ev.eventType) && (
-                  <pre className="text-xs mt-1">{JSON.stringify(payload, null, 2)}</pre>
+                {![
+                  "comment",
+                  "assigned",
+                  "created",
+                  "attachment_added",
+                  "post",
+                  'document_added',
+                ].includes(ev.eventType) && (
+                  <pre className="text-xs mt-1">
+                    {JSON.stringify(payload, null, 2)}
+                  </pre>
                 )}
               </div>
             );
@@ -442,13 +649,41 @@ const orderedAllUsers = [
 
       {/* SIDEBAR */}
       <div className="space-y-3">
+        <div className="bg-white rounded border p-3">
+  <div className="font-semibold mb-2">Job Status</div>
+
+  <div className="text-sm text-gray-700 mb-3">
+    Current status:{' '}
+    <strong>{statusLabel(data.currentStatus || 'NEW')}</strong>
+  </div>
+
+  <select
+    className="border rounded w-full p-2 mb-3"
+    value={data.currentStatus || 'NEW'}
+    onChange={(e) => changeStatus(e.target.value)}
+    disabled={changingStatus}
+  >
+    {JOB_STATUSES.map((s) => (
+      <option key={s} value={s}>
+        {statusLabel(s)}
+      </option>
+    ))}
+  </select>
+
+  {changingStatus && (
+    <div className="text-xs text-gray-500">Updating status…</div>
+  )}
+</div>
         {/* Multi-assignee chips + picker */}
         <div className="bg-white rounded border p-3">
           <div className="font-semibold mb-2">Assignees</div>
 
           <div className="flex flex-wrap gap-2 mb-3">
             {(data.assignments || []).map((a: any) => (
-              <span key={a.user.id} className="px-2 py-1 rounded bg-gray-100 text-sm">
+              <span
+                key={a.user.id}
+                className="px-2 py-1 rounded bg-gray-100 text-sm"
+              >
                 {a.user.name}
                 <button
                   className="ml-2 text-red-600 hover:underline text-xs"
@@ -460,27 +695,35 @@ const orderedAllUsers = [
                 </button>
               </span>
             ))}
-            {!data.assignments?.length && <span className="text-sm text-gray-500">Unassigned</span>}
+            {!data.assignments?.length && (
+              <span className="text-sm text-gray-500">Unassigned</span>
+            )}
           </div>
 
           <div className="mt-1 flex items-start gap-2">
-<select
-  multiple
-  className="border rounded p-2 min-w-[260px] h-28"
-  value={selected}
-  onChange={(e) => {
-    const vals = Array.from(e.target.selectedOptions).map((o) => o.value);
-    setSelected(vals);
-  }}
->
-  {orderedAllUsers.map((u: any) => (
-    <option key={u.id} value={u.id}>
-      {u.id === meId ? `${u.name} (Me)` : u.name}
-    </option>
-  ))}
-</select>
+            <select
+              multiple
+              className="border rounded p-2 min-w-[260px] h-28"
+              value={selected}
+              onChange={(e) => {
+                const vals = Array.from(e.target.selectedOptions).map(
+                  (o) => o.value,
+                );
+                setSelected(vals);
+              }}
+            >
+              {orderedAllUsers.map((u: any) => (
+                <option key={u.id} value={u.id}>
+                  {u.id === meId ? `${u.name} (Me)` : u.name}
+                </option>
+              ))}
+            </select>
 
-            <button onClick={handleAddAssignees} className="px-3 py-2 rounded bg-blue-600 text-white" type="button">
+            <button
+              onClick={handleAddAssignees}
+              className="px-3 py-2 rounded bg-blue-600 text-white"
+              type="button"
+            >
               Add Assignees
             </button>
           </div>
@@ -490,37 +733,128 @@ const orderedAllUsers = [
         <div className="bg-white rounded border p-3">
           <div className="font-semibold mb-2">Status & Single Assignment</div>
           <div className="text-sm text-gray-700 mb-2">
-            Current assignee: <strong>{data.assignee?.name ?? '—'}</strong>
+            Current assignee: <strong>{data.assignee?.name ?? "—"}</strong>
           </div>
-<div className="bg-white rounded border p-3">
-  <div className="font-semibold mb-2">Danger Zone</div>
-  <button
-    onClick={handleDelete}
-    className="px-3 py-2 rounded bg-red-600 text-white hover:bg-red-700"
-    type="button"
-  >
-    Delete Request
-  </button>
-  <div className="text-xs text-gray-500 mt-2">
-    Only admins/coordinators or the request creator can delete.
-  </div>
-</div>
-<label className="block text-sm text-gray-600 mb-1">Assign to</label>
-<select
-  className="border rounded w-full p-2"
-  value={data.assignee?.id ?? ''}
-  onChange={(e) => assignTo(e.target.value)}
-  disabled={assigning}
->
-  <option value="">— Unassigned —</option>
-  {orderedUsers.map((u: any) => (
-    <option key={u.id} value={u.id}>
-      {u.id === meId ? `${u.name} (Me)` : u.name}
-    </option>
-  ))}
-</select>
+          <div className="bg-white rounded border p-3">
+            <div className="font-semibold mb-2">Danger Zone</div>
+            <button
+              onClick={handleDelete}
+              className="px-3 py-2 rounded bg-red-600 text-white hover:bg-red-700"
+              type="button"
+            >
+              Delete Request
+            </button>
+            <div className="text-xs text-gray-500 mt-2">
+              Only admins/coordinators or the request creator can delete.
+            </div>
+          </div>
+          <label className="block text-sm text-gray-600 mb-1">Assign to</label>
+          <select
+            className="border rounded w-full p-2"
+            value={data.assignee?.id ?? ""}
+            onChange={(e) => assignTo(e.target.value)}
+            disabled={assigning}
+          >
+            <option value="">— Unassigned —</option>
+            {orderedUsers.map((u: any) => (
+              <option key={u.id} value={u.id}>
+                {u.id === meId ? `${u.name} (Me)` : u.name}
+              </option>
+            ))}
+          </select>
 
-          {assigning && <div className="text-xs text-gray-500 mt-2">Assigning…</div>}
+          {assigning && (
+            <div className="text-xs text-gray-500 mt-2">Assigning…</div>
+          )}
+          <div className="mt-4 grid grid-cols-1 gap-3">
+            <div className="border rounded-lg p-3 bg-gray-50">
+              <div className="font-semibold text-sm mb-1">Cotizacion</div>
+              <p className="text-xs text-gray-500 mb-3">
+                Upload quote PDFs, images, Word docs, Excel files, or related
+                files.
+              </p>
+
+              <input
+                ref={cotizacionInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
+                onChange={(e) =>
+                  handleDocumentUpload("cotizacion", e.target.files)
+                }
+              />
+
+              <button
+                type="button"
+                onClick={() => cotizacionInputRef.current?.click()}
+                disabled={uploadingDocKind === "cotizacion"}
+                className="w-full px-3 py-2 rounded bg-black text-white text-sm disabled:opacity-50"
+              >
+                {uploadingDocKind === "cotizacion"
+                  ? "Uploading…"
+                  : "Add Cotizacion"}
+              </button>
+            </div>
+
+            <div className="border rounded-lg p-3 bg-gray-50">
+              <div className="font-semibold text-sm mb-1">Orden de compra</div>
+              <p className="text-xs text-gray-500 mb-3">
+                Upload purchase order files and supporting documents.
+              </p>
+
+              <input
+                ref={ordenCompraInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
+                onChange={(e) =>
+                  handleDocumentUpload("orden-compra", e.target.files)
+                }
+              />
+
+              <button
+                type="button"
+                onClick={() => ordenCompraInputRef.current?.click()}
+                disabled={uploadingDocKind === "orden-compra"}
+                className="w-full px-3 py-2 rounded bg-black text-white text-sm disabled:opacity-50"
+              >
+                {uploadingDocKind === "orden-compra"
+                  ? "Uploading…"
+                  : "Add Orden de compra"}
+              </button>
+            </div>
+
+            <div className="border rounded-lg p-3 bg-gray-50">
+              <div className="font-semibold text-sm mb-1">Remision</div>
+              <p className="text-xs text-gray-500 mb-3">
+                Upload delivery/remission documents, photos, or related files.
+              </p>
+
+              <input
+                ref={remisionInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
+                onChange={(e) =>
+                  handleDocumentUpload("remision", e.target.files)
+                }
+              />
+
+              <button
+                type="button"
+                onClick={() => remisionInputRef.current?.click()}
+                disabled={uploadingDocKind === "remision"}
+                className="w-full px-3 py-2 rounded bg-black text-white text-sm disabled:opacity-50"
+              >
+                {uploadingDocKind === "remision"
+                  ? "Uploading…"
+                  : "Add Remision"}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 
@@ -20,10 +20,15 @@ type BoardColumn = {
   items: RequestCard[];
 };
 
+function prettyStatus(value: string) {
+  return value.replace(/_/g, ' ');
+}
+
 export default function Board() {
   const [columns, setColumns] = useState<BoardColumn[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [openStatuses, setOpenStatuses] = useState<Record<string, boolean>>({});
 
   async function loadBoard() {
     setLoading(true);
@@ -31,7 +36,20 @@ export default function Board() {
 
     try {
       const res = await api.get('/board');
-      setColumns(res.data.columns || []);
+      const nextColumns = res.data.columns || [];
+      setColumns(nextColumns);
+
+      // First load: open statuses that have jobs, keep empty ones closed.
+      setOpenStatuses((prev) => {
+        if (Object.keys(prev).length > 0) return prev;
+
+        const initial: Record<string, boolean> = {};
+        nextColumns.forEach((col: BoardColumn) => {
+          initial[col.key] = col.items.length > 0;
+        });
+
+        return initial;
+      });
     } catch (e: any) {
       setErrorMsg(e?.response?.data?.message || e?.message || 'Failed to load board');
     } finally {
@@ -42,6 +60,34 @@ export default function Board() {
   useEffect(() => {
     loadBoard();
   }, []);
+
+  function toggleStatus(key: string) {
+    setOpenStatuses((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  }
+
+  function expandAll() {
+    const next: Record<string, boolean> = {};
+    columns.forEach((col) => {
+      next[col.key] = true;
+    });
+    setOpenStatuses(next);
+  }
+
+  function collapseAll() {
+    const next: Record<string, boolean> = {};
+    columns.forEach((col) => {
+      next[col.key] = false;
+    });
+    setOpenStatuses(next);
+  }
+
+  const totalJobs = useMemo(
+    () => columns.reduce((sum, col) => sum + col.items.length, 0),
+    [columns],
+  );
 
   if (loading) {
     return <div className="p-4 text-sm text-gray-600">Loading dispatch board…</div>;
@@ -60,62 +106,115 @@ export default function Board() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Dispatch Board</h1>
-        <p className="text-sm text-gray-600">Requests grouped by current status.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Dispatch Board</h1>
+          <p className="text-sm text-gray-600">
+            {totalJobs} total job{totalJobs === 1 ? '' : 's'} grouped by status.
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={expandAll}
+            className="border rounded px-3 py-2 text-sm bg-white hover:bg-gray-50"
+          >
+            Expand all
+          </button>
+
+          <button
+            type="button"
+            onClick={collapseAll}
+            className="border rounded px-3 py-2 text-sm bg-white hover:bg-gray-50"
+          >
+            Collapse all
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {columns.map((col) => (
-          <div key={col.key} className="bg-gray-50 border rounded-lg p-3 min-h-[240px]">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-sm uppercase tracking-wide text-gray-700">
-                {col.title}
-              </h2>
-              <span className="text-xs bg-white border rounded px-2 py-1 text-gray-600">
-                {col.items.length}
-              </span>
-            </div>
+      <div className="space-y-3">
+        {columns.map((col) => {
+          const isOpen = !!openStatuses[col.key];
 
-            <div className="space-y-3">
-              {col.items.length === 0 ? (
-                <div className="text-sm text-gray-400">No requests</div>
-              ) : (
-                col.items.map((card) => {
-                  const assignedNames =
-                    card.assignments?.map((a) => a.user?.name).filter(Boolean).join(', ') ||
-                    card.assignee?.name ||
-                    'Unassigned';
+          return (
+            <section key={col.key} className="bg-white border rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => toggleStatus(col.key)}
+                className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-500 text-sm w-4">
+                    {isOpen ? '▼' : '▶'}
+                  </span>
 
-                  return (
-                    <Link
-                      key={card.id}
-                      to={`/requests/${card.id}`}
-                      className="block bg-white border rounded p-3 hover:shadow-sm transition"
-                    >
-                      <div className="font-medium text-sm mb-1">{card.title}</div>
+                  <div>
+                    <h2 className="font-semibold text-sm uppercase tracking-wide text-gray-800">
+                      {prettyStatus(col.title || col.key)}
+                    </h2>
+                    <div className="text-xs text-gray-500">
+                      Click to {isOpen ? 'hide' : 'show'} jobs
+                    </div>
+                  </div>
+                </div>
 
-                      <div className="text-xs text-gray-600 mb-2">
-                        {card.type?.name ?? 'Request'} • {card.priority}
-                        {card.company ? <> • {card.company}</> : null}
-                      </div>
+                <span className="text-xs bg-gray-100 border rounded px-2 py-1 text-gray-700">
+                  {col.items.length}
+                </span>
+              </button>
 
-                      {card.description ? (
-                        <div className="text-sm text-gray-700 line-clamp-3 mb-2">
-                          {card.description}
-                        </div>
-                      ) : null}
+              {isOpen && (
+                <div className="border-t bg-gray-50 p-3">
+                  {col.items.length === 0 ? (
+                    <div className="text-sm text-gray-400 bg-white border rounded p-3">
+                      No jobs in this status.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                      {col.items.map((card) => {
+                        const assignedNames =
+                          card.assignments
+                            ?.map((a) => a.user?.name)
+                            .filter(Boolean)
+                            .join(', ') ||
+                          card.assignee?.name ||
+                          'Unassigned';
 
-                      <div className="text-xs text-gray-500">
-                        Assigned: {assignedNames}
-                      </div>
-                    </Link>
-                  );
-                })
+                        return (
+                          <Link
+                            key={card.id}
+                            to={`/requests/${card.id}`}
+                            className="block bg-white border rounded p-3 hover:shadow-sm transition"
+                          >
+                            <div className="font-medium text-sm mb-1">
+                              {card.title}
+                            </div>
+
+                            <div className="text-xs text-gray-600 mb-2">
+                              {card.type?.name ?? 'Request'} • {card.priority}
+                              {card.company ? <> • {card.company}</> : null}
+                            </div>
+
+                            {card.description ? (
+                              <div className="text-sm text-gray-700 line-clamp-3 mb-2">
+                                {card.description}
+                              </div>
+                            ) : null}
+
+                            <div className="text-xs text-gray-500">
+                              Assigned: {assignedNames}
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
-            </div>
-          </div>
-        ))}
+            </section>
+          );
+        })}
       </div>
     </div>
   );

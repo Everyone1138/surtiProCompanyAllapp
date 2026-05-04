@@ -28,6 +28,7 @@ export default function App() {
             {tab('/', 'My Work')}
             {tab('/board', 'Dispatch Board')}
             {tab('/new', 'Submit Request')}
+            {tab('/job-search', 'Job Search')}
             {tab('/driver', 'Driver Jobs')}
           </nav>
           <div className="ml-auto text-sm flex items-center gap-3">

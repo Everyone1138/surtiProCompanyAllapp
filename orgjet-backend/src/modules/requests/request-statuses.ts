@@ -1,6 +1,8 @@
 export const REQUEST_STATUSES = [
   'NEW',
   'ASSIGNED',
+  'DISASSEMBLE',
+  'PURCHASES',
   'EN_ROUTE_PICKUP',
   'PICKED_UP',
   'EN_ROUTE_DROPOFF',

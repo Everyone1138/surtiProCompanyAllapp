@@ -12,6 +12,7 @@ import RouteError from './components/RouteError'
 import RequestsList from './pages/RequestsList'
 import DriverJobs from './pages/DriverJobs'
 import JobSearch from './pages/JobSearch'
+import { useAuth } from './state/auth'
 
 const router = createBrowserRouter([
   {
@@ -19,11 +20,11 @@ const router = createBrowserRouter([
     element: <App />,
     errorElement: <RouteError />,
     children: [
-      { index: true, element: <MyWork /> },
+      { index: true, element: <AdminOnly><MyWork /></AdminOnly> },
       { path: 'board', element: <Board /> },
-      { path: 'new', element: <NewRequest /> },
+      { path: 'new', element: <AdminOnly><NewRequest /></AdminOnly> },
       { path: 'driver', element: <DriverJobs />, errorElement: <RouteError /> },
-      { path: 'job-search', element: <JobSearch />, errorElement: <RouteError /> },
+      { path: 'job-search', element: <AdminOnly><JobSearch /></AdminOnly>, errorElement: <RouteError /> },
       { path: 'r/:id', element: <RequestDetail /> },
       { path: 'my-work', element: <MyWork />, errorElement: <RouteError /> },
       { path: 'requests', element: <RequestsList />, errorElement: <RouteError /> },
@@ -39,3 +40,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <RouterProvider router={router} />
   </React.StrictMode>,
 )
+
+function AdminOnly({ children }: { children: JSX.Element }) {
+  const { user } = useAuth()
+
+  if (!user) return null
+
+  const allowed = user.role === 'ADMIN' || user.role === 'COORDINATOR'
+
+  if (!allowed) return <RouteError />
+
+  return children
+}

@@ -1,4 +1,4 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PrismaService } from '../../prisma.service';
 
@@ -21,27 +21,8 @@ export class BoardController {
   constructor(private prisma: PrismaService) {}
 
   @Get()
-  async board(@Req() req: any) {
-    const userId = req.user.userId || req.user.id;
-
-    const me = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, role: true },
-    });
-
-    const isAdminView = me?.role === 'ADMIN' || me?.role === 'COORDINATOR';
-
-    const where = isAdminView
-      ? {}
-      : {
-          OR: [
-            { assigneeId: userId },
-            { assignments: { some: { userId } } },
-          ],
-        };
-
+  async board() {
     const items = await this.prisma.request.findMany({
-      where,
       include: {
         type: true,
         team: true,

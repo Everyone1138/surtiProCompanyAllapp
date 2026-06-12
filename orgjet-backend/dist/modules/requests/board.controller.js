@@ -8,9 +8,6 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var __param = (this && this.__param) || function (paramIndex, decorator) {
-    return function (target, key) { decorator(target, key, paramIndex); }
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BoardController = void 0;
 const common_1 = require("@nestjs/common");
@@ -32,23 +29,8 @@ let BoardController = class BoardController {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    async board(req) {
-        const userId = req.user.userId || req.user.id;
-        const me = await this.prisma.user.findUnique({
-            where: { id: userId },
-            select: { id: true, role: true },
-        });
-        const isAdminView = (me === null || me === void 0 ? void 0 : me.role) === 'ADMIN' || (me === null || me === void 0 ? void 0 : me.role) === 'COORDINATOR';
-        const where = isAdminView
-            ? {}
-            : {
-                OR: [
-                    { assigneeId: userId },
-                    { assignments: { some: { userId } } },
-                ],
-            };
+    async board() {
         const items = await this.prisma.request.findMany({
-            where,
             include: {
                 type: true,
                 team: true,
@@ -84,9 +66,8 @@ let BoardController = class BoardController {
 exports.BoardController = BoardController;
 __decorate([
     (0, common_1.Get)(),
-    __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], BoardController.prototype, "board", null);
 exports.BoardController = BoardController = __decorate([

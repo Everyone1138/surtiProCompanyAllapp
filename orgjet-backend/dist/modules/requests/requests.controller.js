@@ -24,6 +24,7 @@ const fs_1 = require("fs");
 const fs_2 = require("fs");
 const request_statuses_1 = require("./request-statuses");
 const common_2 = require("@nestjs/common");
+const roles_guard_1 = require("../../common/roles.guard");
 const path = require("path");
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 function ensureUploadsFolder() {
@@ -808,7 +809,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "createPost", null);
 exports.RequestsController = RequestsController = __decorate([
-    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt'), roles_guard_1.RolesGuard),
     (0, common_1.Controller)('requests'),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService])
 ], RequestsController);

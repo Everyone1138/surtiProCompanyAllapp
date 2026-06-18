@@ -21,6 +21,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { unlinkSync } from 'fs';
 import { isValidRequestStatus, REQUEST_STATUSES } from './request-statuses';
 import { BadRequestException } from '@nestjs/common';
+import { Roles, RolesGuard } from '../../common/roles.guard';
 import * as path from 'path';
 
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
@@ -97,7 +98,7 @@ class CommentDto {
   @IsString() body!: string;
 }
 
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('requests')
 export class RequestsController {
   constructor(private prisma: PrismaService) {}

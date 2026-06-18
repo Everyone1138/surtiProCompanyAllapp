@@ -35,6 +35,9 @@ export const deleteRequest = (id: string) =>
 export const removeAssignee = (requestId: string, userId: string) =>
   api.patch(`/requests/${requestId}/assignees/remove`, { userId }).then(r => r.data);
 
+export const driverUpdateJobStatus = (requestId: string, status: string) =>
+  api.post(`/requests/driver/${requestId}/status`, { status }).then(r => r.data);
+
 
 export const uploadRequestDocuments = (
   requestId: string,

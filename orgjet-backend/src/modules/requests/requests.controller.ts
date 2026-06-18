@@ -104,6 +104,7 @@ export class RequestsController {
   constructor(private prisma: PrismaService) {}
 
 // LIST / SEARCH with filters
+@Roles('ADMIN', 'COORDINATOR')
 @Get()
 async list(
   @Req() req: any,
@@ -264,6 +265,7 @@ async list(
 // }
 
   // CREATE with dueAt + company/companyId
+  @Roles('ADMIN','COORDINATOR')
   @Post()
   async create(@Req() req: any, @Body() dto: CreateRequestDto) {
     const created = await this.prisma.request.create({
@@ -325,6 +327,7 @@ async listRequestTypes() {
 
 
   // PATCH (status, priority, dueAt)
+@Roles('ADMIN', 'COORDINATOR')
 @Patch(':id')
 async update(
   @Req() req: any,
@@ -431,6 +434,7 @@ async driverUpdateStatus(
   }
 
   // DELETE a request (admin/coordinator or creator)
+@Roles('ADMIN', 'COORDINATOR')
 @Delete(':id')
 async remove(@Req() req: any, @Param('id') id: string) {
   const me = await this.prisma.user.findUnique({
@@ -484,6 +488,7 @@ async remove(@Req() req: any, @Param('id') id: string) {
 
 
   // LEGACY single-assign endpoint -> now writes to join table (SQLite-safe)
+  @Roles('ADMIN', 'COORDINATOR')
   @Post(':id/assign')
   async assign(
     @Req() req: any,
@@ -579,6 +584,7 @@ async getMyJobs(@Req() req: any) {
 
 
   // ADD multiple assignees (SQLite-safe dedupe)
+  @Roles('ADMIN', 'COORDINATOR')
   @Post(':id/assignees')
   async addAssignees(
     @Req() req: any,

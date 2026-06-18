@@ -619,6 +619,7 @@ let RequestsController = class RequestsController {
 };
 exports.RequestsController = RequestsController;
 __decorate([
+    (0, roles_guard_1.Roles)('ADMIN', 'COORDINATOR'),
     (0, common_1.Get)(),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('status')),
@@ -635,6 +636,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "list", null);
 __decorate([
+    (0, roles_guard_1.Roles)('ADMIN', 'COORDINATOR'),
     (0, common_1.Post)(),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
@@ -656,6 +658,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "get", null);
 __decorate([
+    (0, roles_guard_1.Roles)('ADMIN', 'COORDINATOR'),
     (0, common_1.Patch)(':id'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id')),
@@ -683,6 +686,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "comment", null);
 __decorate([
+    (0, roles_guard_1.Roles)('ADMIN', 'COORDINATOR'),
     (0, common_1.Delete)(':id'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id')),
@@ -691,6 +695,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "remove", null);
 __decorate([
+    (0, roles_guard_1.Roles)('ADMIN', 'COORDINATOR'),
     (0, common_1.Post)(':id/assign'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id')),
@@ -707,6 +712,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], RequestsController.prototype, "getMyJobs", null);
 __decorate([
+    (0, roles_guard_1.Roles)('ADMIN', 'COORDINATOR'),
     (0, common_1.Post)(':id/assignees'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id')),

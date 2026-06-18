@@ -4,14 +4,15 @@ import {
   api,
   listUsers,
   addAssignees as apiAddAssignees,
-  removeAssignee as apiRemoveAssignee,
-  uploadRequestDocuments,
+  removeAssignee as apiRemoveAssignee, 
+  uploadRequestDocuments,driverUpdateJobStatus,
 } from "../lib/api";
 import CameraCapture from "../components/CameraCapture";
 import { useNavigate } from "react-router-dom";
 import { deleteRequest } from "../lib/api";
 import { useLocation } from "react-router-dom";
 import { Outlet } from "react-router-dom";
+import { useAuth } from '../state/auth';
 
 
 const JOB_STATUSES = [
@@ -39,6 +40,13 @@ export default function RequestDetail() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [changingStatus, setChangingStatus] = useState(false);
+
+  const { user } = useAuth();
+
+  const isAdminOrCoordinator =
+  user?.role === 'ADMIN' || user?.role === 'COORDINATOR';
+
+  const isEmployee = !isAdminOrCoordinator;
 
   // comments / posts
   const [comment, setComment] = useState("");
@@ -232,7 +240,12 @@ async function changeStatus(status: string) {
   setChangingStatus(true);
 
   try {
-    await api.patch(`/requests/${id}`, { status });
+    if (isAdminOrCoordinator) {
+      await api.patch(`/requests/${id}`, { status });
+    } else {
+      await driverUpdateJobStatus(id, status);
+    }
+
     await refresh();
   } catch (e: any) {
     alert(e?.response?.data?.message || 'Failed to update status');

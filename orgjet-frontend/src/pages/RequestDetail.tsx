@@ -683,6 +683,12 @@ async function changeStatus(status: string) {
     ))}
   </select>
 
+  {isEmployee && (
+  <div className="text-xs text-gray-500 mb-2">
+    Employees can update status only for jobs assigned to them.
+  </div>
+)}
+
   {changingStatus && (
     <div className="text-xs text-gray-500">Updating status…</div>
   )}

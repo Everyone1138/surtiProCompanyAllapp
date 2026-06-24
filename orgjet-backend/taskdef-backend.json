@@ -24,7 +24,7 @@
         "logConfiguration": {
             "logDriver": "awslogs",
             "options": {
-                "awslogs-group": "/orgjet-backend",
+                "awslogs-group": "/ecs/orgjet-backend",
                 "awslogs-region": "us-east-1",
                 "awslogs-stream-prefix": "ecs"
             }

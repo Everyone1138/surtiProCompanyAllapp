@@ -18,7 +18,7 @@
             { "name": "NODE_ENV", "value": "production" },
             { "name": "PORT", "value": "3000" },
             { "name": "DATABASE_URL", "value": "file:/app/prisma/dev.db" },
-            { "name": "CORS_ORIGIN", "value": "https://workjetworks.com" },
+            { "name": "CORS_ORIGIN", "value": "https://workjetworks.com,https://www.workjetworks.com" },
             { "name": "JWT_SECRET", "value": "AKIAYIJSJ2ZMR44IXPKL/U2AA3mcE7m6Yh4GUs7wksOYokkSA50G1SIlPkjc+" }
         ],
         "logConfiguration": {

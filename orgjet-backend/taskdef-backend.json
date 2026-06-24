@@ -19,12 +19,12 @@
             { "name": "PORT", "value": "3000" },
             { "name": "DATABASE_URL", "value": "file:/app/prisma/dev.db" },
             { "name": "CORS_ORIGIN", "value": "https://workjetworks.com" },
-            { "name": "JWT_SECRET", "value": "H6Bv1Ehx3/RkfH+D3/dU4wYpyhqm81ViLYXJF2RiWNoaYeo0uyElDKDToogleHYE" }
+            { "name": "JWT_SECRET", "value": "AKIAYIJSJ2ZMR44IXPKL/U2AA3mcE7m6Yh4GUs7wksOYokkSA50G1SIlPkjc+" }
         ],
         "logConfiguration": {
             "logDriver": "awslogs",
             "options": {
-                "awslogs-group": "/ecs/orgjet-backend",
+                "awslogs-group": "/orgjet-backend",
                 "awslogs-region": "us-east-1",
                 "awslogs-stream-prefix": "ecs"
             }
